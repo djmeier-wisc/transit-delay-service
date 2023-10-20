@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice;
 
-import com.doug.projects.transitdelayservice.entity.DelayObject;
+import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimeDelay;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -27,8 +27,8 @@ public class TransitDelayServiceApplication {
     }
 
     @Bean
-    public DynamoDbTable<DelayObject> provideTable(DynamoDbEnhancedClient enhancedClient) {
-        return enhancedClient.table("transit_delay", TableSchema.fromBean(DelayObject.class));
+    public DynamoDbTable<RouteTimeDelay> provideTable(DynamoDbEnhancedClient enhancedClient) {
+        return enhancedClient.table("route_time_delay", TableSchema.fromBean(RouteTimeDelay.class));
     }
 
     @Bean

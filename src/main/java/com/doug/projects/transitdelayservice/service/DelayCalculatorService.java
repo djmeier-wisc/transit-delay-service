@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.DelayObject;
+import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimeDelay;
 import com.doug.projects.transitdelayservice.entity.gtfs.realtime.Entity;
 import com.doug.projects.transitdelayservice.entity.gtfs.realtime.RealtimeTransitResponse;
 import com.doug.projects.transitdelayservice.repository.DelayObjectRepository;
@@ -34,30 +34,28 @@ public class DelayCalculatorService {
         log.info("Completed realtimeRequest successfully, building model...");
         int timestampFromMetro = transitResponse.getHeader().getTimestamp();
 
-        List<DelayObject> delayObjects = transitResponse.getEntity().parallelStream().filter(DelayCalculatorService::validateRequiredFields).map(entity -> {
+        List<RouteTimeDelay> delayObjects =
+                transitResponse.getEntity().parallelStream().filter(DelayCalculatorService::validateRequiredFields).map(entity -> {
             String routeFriendlyName =
                     routeMapperService.getFriendlyName(Integer.parseInt(entity.getTrip_update().getTrip().getRoute_id()));
-            String runNumber = entity.getTrip_update().getTrip().getTrip_id();
-            DelayObject currDelayOfRoute = new DelayObject();
-            StringBuilder builder = new StringBuilder();
-            builder.append(timestampFromMetro)
-                    .append(":")
-                    .append(routeFriendlyName).append(":").append(runNumber);
-            currDelayOfRoute.setId(builder.toString());
-            currDelayOfRoute.setMetroTimestamp((long) timestampFromMetro);
+                    RouteTimeDelay currDelayOfRoute = new RouteTimeDelay();
+                    currDelayOfRoute.setTripId(entity.getTrip_update().getTrip().getTrip_id());
+                    currDelayOfRoute.setTimestamp(timestampFromMetro);
             currDelayOfRoute.setRoute(routeFriendlyName);
             currDelayOfRoute.setDelay(entity.getTrip_update().getStop_time_update().get(0).getDeparture().getDelay());
-            currDelayOfRoute.setStopId(entity.getTrip_update().getStop_time_update().get(0).getStop_id());
-            currDelayOfRoute.setRunNumber(runNumber);
+                    currDelayOfRoute.setClosestStopId(entity.getTrip_update().getStop_time_update().get(0).getStop_id());
             return currDelayOfRoute;
         }).collect(Collectors.toList());
-
-        Map<String,List<DelayObject>> delayObjectMap =
-                delayObjects.stream().collect(Collectors.groupingBy(DelayObject::getId));
-        delayObjects.removeIf(obj->delayObjectMap.get(obj.getId()).size()>1);
+        removeDuplicates(delayObjects);
         log.info("Built model successfully from {} objects, yielding {} values for database write.",
                 transitResponse.getEntity().size(), delayObjects.size());
         delayObjectRepository.writeToDb(delayObjects);
+    }
+
+    private static void removeDuplicates(List<RouteTimeDelay> delayObjects) {
+        Map<String,List<RouteTimeDelay>> delayObjectMap =
+                delayObjects.stream().collect(Collectors.groupingBy(RouteTimeDelay::getTripId));
+        delayObjects.removeIf(obj->delayObjectMap.get(obj.getTripId()).size()>1);
     }
 
     /**
