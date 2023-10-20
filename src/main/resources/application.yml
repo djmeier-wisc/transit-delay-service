@@ -1,0 +1,6 @@
+region: us-west-2
+metro:
+  realtime: http://transitdata.cityofmadison.com/GTFS-RealTime/TrapezeRealTimeFeed.json
+spring:
+  codec:
+    max-in-memory-size: 1000KB

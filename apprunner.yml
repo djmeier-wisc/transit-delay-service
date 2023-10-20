@@ -1,0 +1,8 @@
+version: 1.0
+runtime: corretto21
+build:
+  commands:
+    build:
+      - mvn clean package
+run:
+  command: java -Xms256m -jar target/MyApp-1.0-SNAPSHOT.jar .
