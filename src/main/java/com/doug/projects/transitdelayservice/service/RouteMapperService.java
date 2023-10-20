@@ -24,6 +24,6 @@ public class RouteMapperService {
         routeIdToServiceNameMap.putAll(Map.of(10541, "80", 10542, "81", 10543, "82", 10544, "84", 10561, "60", 10562, "61", 10563, "62", 10564, "63", 10567, "64"));
     }
     public String getFriendlyName(Integer routeId) {
-        return routeIdToServiceNameMap.getOrDefault(routeId,"UNKNOWN");
+        return routeIdToServiceNameMap.getOrDefault(routeId, "UNKNOWN_ROUTE");
     }
 }
