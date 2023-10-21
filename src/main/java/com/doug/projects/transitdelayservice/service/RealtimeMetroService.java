@@ -13,6 +13,6 @@ public class RealtimeMetroService {
     @Value("${metro.realtime}")
     private String realtimeUrl;
     public RealtimeTransitResponse getCurrentRunData() {
-        return client.get().uri(realtimeUrl).retrieve().bodyToMono(RealtimeTransitResponse.class).block();
+        return client.get().uri(realtimeUrl).retrieve().bodyToMono(RealtimeTransitResponse.class).retry(3).block();
     }
 }

@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.repository;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimeDelay;
+import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
@@ -15,34 +15,38 @@ import java.util.List;
 @Slf4j
 public class DelayObjectRepository {
     private final DynamoDbEnhancedClient enhancedClient;
-    private final DynamoDbTable<RouteTimeDelay> delayTable;
+    private final DynamoDbTable<RouteTimestamp> delayTable;
 
     /**
      * Writes a list of delayObjects to the dynamodb
      *
-     * @param delayObjects the delayObjects to persist
+     * @param routeTimestamps the delayObjects to persist
+     * @return true if successful write, false if failure
      */
-    public void writeToDb(List<RouteTimeDelay> delayObjects) {
+    public boolean writeToDb(List<RouteTimestamp> routeTimestamps) {
+        if (routeTimestamps.isEmpty()) return true;
         try {
-            while (!delayObjects.isEmpty()) {
+            while (!routeTimestamps.isEmpty()) {
                 int maxDynamoWriteIndex = 24;
-                int lastIndexOfList = delayObjects.size();
+                int lastIndexOfList = routeTimestamps.size();
                 if (lastIndexOfList < maxDynamoWriteIndex) {
                     maxDynamoWriteIndex = lastIndexOfList;
                 }
-                List<RouteTimeDelay> subList = delayObjects.subList(0, maxDynamoWriteIndex);
+                List<RouteTimestamp> subList = routeTimestamps.subList(0, maxDynamoWriteIndex);
                 //for some god-forsaken reason, we can only write 25 items at a time to dynamo
                 enhancedClient.batchWriteItem(r -> {
-                    WriteBatch.Builder<RouteTimeDelay> builder = WriteBatch.builder(RouteTimeDelay.class);
+                    WriteBatch.Builder<RouteTimestamp> builder = WriteBatch.builder(RouteTimestamp.class);
                     subList.forEach(builder::addPutItem);
                     builder.mappedTableResource(delayTable);
                     r.addWriteBatch(builder.build());
                 });
-                delayObjects.removeAll(subList);
+                routeTimestamps.removeAll(subList);
             }
             log.info("Completed write successfully!");
+            return true;
         } catch (Exception e) {
             log.error("Failed to write delayObjects", e);
+            return false;
         }
     }
 }
