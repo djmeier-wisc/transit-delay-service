@@ -5,4 +5,4 @@ build:
     build:
       - mvn clean package
 run:
-  command: java -Xms256m -jar target/MyApp-1.0-SNAPSHOT.jar .
+  command: java -Xms256m -jar target/transit-delay-service-1.0.0.jar .
