@@ -12,10 +12,22 @@ import java.util.List;
 @DynamoDbBean
 @Data
 public class RouteTimestamp {
+    /**
+     * The route
+     */
     @Getter(AccessLevel.NONE)
     public String route;
+    /**
+     * The timestamp, gathered from GTFS realtime feed. DO NOT USE SYSTEM TIMESTAMP to avoid duplication
+     */
     public Integer timestamp;
+    /**
+     * The list of routes, in the format of <code>BusStates</code> toString method. delay%closestStopId%tripId
+     */
     public List<String> busStatesList;
+    /**
+     * The average difference from schedule of this route, across all active buses.
+     */
     public Double averageDelay;
 
     @DynamoDbPartitionKey
