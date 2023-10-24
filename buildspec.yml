@@ -14,5 +14,7 @@ phases:
       - mvn package
 artifacts:
   files:
-    - target/transit-delay-service-1.0.0.jar
+    - target/*.jar
+    - scripts/*.sh
+    - appspec.yml
   discard-paths: yes
