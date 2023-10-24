@@ -6,7 +6,6 @@ import com.fasterxml.jackson.dataformat.csv.CsvMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
-import org.springframework.util.ResourceUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,6 +18,7 @@ import java.util.stream.Collectors;
 public class RouteMapperService {
     private static final Map<Integer, String> routeIdToServiceNameMap = new HashMap<>();
     private static final Map<String, String> serviceNameToColorMap = new HashMap<>();
+    private static final Map<String, Integer> serviceNameToSortOrderMap = new HashMap<>();
 
     /**
      * This is a mess, but yml doesn't support maps by default. To be worked on to make this less static
@@ -26,14 +26,16 @@ public class RouteMapperService {
     @PostConstruct
     private void setRouteIdToServiceNameMap() throws RuntimeException {
         try {
-            File file = ResourceUtils.getFile("classpath:routes.csv");
+            File file = new File("files/routes.csv");
             CsvMapper csvMapper = new CsvMapper();
 
             CsvSchema schema = CsvSchema.emptySchema().withHeader();
             MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper.readerWithSchemaFor(RoutesAttributes.class).with(schema).readValues(file);
             List<RoutesAttributes> routesAttributes = routesAttributesIterator.readAll();
-            routeIdToServiceNameMap.putAll(routesAttributes.stream().collect(Collectors.toMap(k -> Integer.parseInt(k.getRoute_id()), RoutesAttributes::getRoute_short_name)));
+            routeIdToServiceNameMap.putAll(routesAttributes.stream().collect(Collectors.toMap(k -> k.getRoute_id(), RoutesAttributes::getRoute_short_name)));
             serviceNameToColorMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" + ra.getRoute_color())));
+            serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name,
+                    RoutesAttributes::getRoute_sort_order)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to load values into map!", e);
         }
@@ -51,6 +53,15 @@ public class RouteMapperService {
         return new ArrayList<>(routeIdToServiceNameMap.values());
     }
 
+    /**
+     * Gets the sort order for a given friendly name. Returns -1 if the friendly name is not found.
+     *
+     * @param friendlyName the friendly name to get the sort order for.
+     * @return the sort order for the given friendly name.
+     */
+    public Integer getSortOrderFor(String routeFriendlyName) {
+        return serviceNameToSortOrderMap.getOrDefault(routeFriendlyName, -1);
+    }
     /**
      * Refreshes the static maps
      *
