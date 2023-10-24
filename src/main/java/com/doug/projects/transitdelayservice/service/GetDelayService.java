@@ -121,7 +121,9 @@ public class GetDelayService {
             }
             columnLabels.add(dateFormat.format(new Date(finalCurrStartTime * 1000)));
         }
-
+        //sorts lineGraphDatas by friendlyName from RouteMapperService
+        lineGraphDatas.sort((o1, o2) -> Integer.compare(routesService.getSortOrderFor(o1.getLineLabel()),
+                routesService.getSortOrderFor(o2.getLineLabel())));
         return new LineGraphDataResponse(lineGraphDatas, columnLabels);
     }
 }
