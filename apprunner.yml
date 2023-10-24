@@ -1,8 +1,0 @@
-version: 1.0
-runtime: corretto21
-build:
-  commands:
-    build:
-      - mvn clean package
-run:
-  command: java -Xms256m -jar target/transit-delay-service-1.0.0.jar .
