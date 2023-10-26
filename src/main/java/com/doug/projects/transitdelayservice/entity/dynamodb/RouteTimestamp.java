@@ -1,8 +1,6 @@
 package com.doug.projects.transitdelayservice.entity.dynamodb;
 
-import lombok.AccessLevel;
-import lombok.Data;
-import lombok.Getter;
+import lombok.*;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
@@ -11,6 +9,9 @@ import java.util.List;
 
 @DynamoDbBean
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class RouteTimestamp {
     /**
      * The route

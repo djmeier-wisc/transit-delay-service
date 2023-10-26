@@ -65,9 +65,7 @@ public class RealtimeResponseAdaptor {
     List<RouteTimestamp> convertFrom(RealtimeTransitResponse transitResponse) {
         int timestampFromMetro = transitResponse.getHeader().getTimestamp();
         return transitResponse.getEntity().parallelStream().filter(RealtimeResponseAdaptor::validateRequiredFields).collect(Collectors.groupingBy(
-                e -> {
-                    return routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update().getTrip().getRoute_id()));
-                }
+                e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update().getTrip().getRoute_id()))
         )).entrySet().stream().map(entry -> {
             var routeName = entry.getKey();
             var entityList = entry.getValue();

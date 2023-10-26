@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 @Repository
 @Slf4j
-public class DelayObjectRepository {
+public class RouteTimestampRepository {
     private final DynamoDbEnhancedClient enhancedClient;
     private final DynamoDbTable<RouteTimestamp> delayTable;
     private final RouteMapperService routeMapperService;
@@ -72,8 +72,12 @@ public class DelayObjectRepository {
         return delayTable.query(queryConditional).items().stream().collect(Collectors.toList());
     }
 
-    public Map<String, List<RouteTimestamp>> getRouteTimestampsBy(Number startTime, Number endTime) {
+    public Map<String, List<RouteTimestamp>> getRouteTimestampsMapBy(Number startTime, Number endTime) {
         return routeMapperService.getAllFriendlyNames().parallelStream().flatMap(friendlyName -> getRouteTimestampsBy(startTime,
                 endTime, friendlyName).stream()).sorted(Comparator.comparing(RouteTimestamp::getTimestamp)).collect(Collectors.groupingBy(RouteTimestamp::getRoute));
+    }
+
+    public List<RouteTimestamp> getRouteTimestampsBy(Number startTime, Number endTime) {
+        return routeMapperService.getAllFriendlyNames().parallelStream().flatMap(friendlyName -> getRouteTimestampsBy(startTime, endTime, friendlyName).stream()).collect(Collectors.toList());
     }
 }
