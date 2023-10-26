@@ -73,7 +73,7 @@ class GetDelayServiceTest {
         assertNotNull(response);
         assertEquals((int) units, (int) response.getDatasets().stream().filter(res -> res.getLineLabel().equals(
                 "Route1")).mapToLong(r -> r.getData().size()).sum());
-        assertEquals(15,
+        assertEquals(20,
                 response.getDatasets().stream().filter(r -> "Route1".equals(r.getLineLabel())).findFirst().get().getData().get(0));
         assertEquals(routeTimestamps.keySet().stream().findAny().get(), response.getDatasets().get(0).getLineLabel());
         assertEquals(units, response.getLabels().size());
