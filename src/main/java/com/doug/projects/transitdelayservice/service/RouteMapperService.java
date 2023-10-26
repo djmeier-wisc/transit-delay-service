@@ -32,7 +32,7 @@ public class RouteMapperService {
             CsvSchema schema = CsvSchema.emptySchema().withHeader();
             MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper.readerWithSchemaFor(RoutesAttributes.class).with(schema).readValues(file);
             List<RoutesAttributes> routesAttributes = routesAttributesIterator.readAll();
-            routeIdToServiceNameMap.putAll(routesAttributes.stream().collect(Collectors.toMap(k -> k.getRoute_id(), RoutesAttributes::getRoute_short_name)));
+            routeIdToServiceNameMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name)));
             serviceNameToColorMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" + ra.getRoute_color())));
             serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name,
                     RoutesAttributes::getRoute_sort_order)));

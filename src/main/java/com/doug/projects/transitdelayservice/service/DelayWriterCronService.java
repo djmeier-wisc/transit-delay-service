@@ -2,31 +2,31 @@ package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.gtfs.realtime.RealtimeTransitResponse;
-import com.doug.projects.transitdelayservice.repository.DelayObjectRepository;
+import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class DelayWriterCronService {
-    private final DelayObjectRepository delayObjectRepository;
+    private final RouteTimestampRepository routeTimestampRepository;
     private final RealtimeMetroService realtimeMetroService;
     private final RealtimeResponseAdaptor adaptor;
     @Value("${doesCronRun}")
     private Boolean doesCronRun;
 
-    private static void removeDuplicates(List<RouteTimestamp> delayObjects) {
-        Map<String, List<RouteTimestamp>> delayObjectMap =
-                delayObjects.stream().collect(Collectors.groupingBy(RouteTimestamp::getRoute));
-        delayObjects.removeIf(obj -> delayObjectMap.get(obj.getRoute()).size() > 1);
+    private static List<RouteTimestamp> removeDuplicates(List<RouteTimestamp> routeTimestamps) {
+        Set<String> seen = new HashSet<>();
+        return routeTimestamps.stream().filter(rt -> seen.add(rt.getRoute())).collect(Collectors.toList());
     }
 
     private static boolean nullTransitFields(RealtimeTransitResponse transitResponse) {
@@ -35,7 +35,7 @@ public class DelayWriterCronService {
 
     @Scheduled(fixedRate = 300000)
     public void getDelayAndWriteToDb() {
-        if (!doesCronRun) return;
+        if (doesCronRun != null && !doesCronRun) return;
         //get realtime delays from metro
         RealtimeTransitResponse transitResponse = realtimeMetroService.getCurrentRunData();
         //remove basic fields for timestamp checking / iteration
@@ -45,10 +45,10 @@ public class DelayWriterCronService {
         }
         log.info("Completed realtimeRequest successfully, building model...");
         List<RouteTimestamp> routeTimestamps = adaptor.convertFrom(transitResponse);
-        removeDuplicates(routeTimestamps);
+        List<RouteTimestamp> uniqueRouteTimestamps = DelayWriterCronService.removeDuplicates(routeTimestamps);
         log.info("Built model successfully from {} objects, yielding {} values for database write.",
-                transitResponse.getEntity().size(), routeTimestamps.size());
-        if (!delayObjectRepository.writeRouteTimestamps(routeTimestamps)) {
+                transitResponse.getEntity().size(), uniqueRouteTimestamps.size());
+        if (!routeTimestampRepository.writeRouteTimestamps(uniqueRouteTimestamps)) {
             log.error("try again next time... failed writing routeTimestamps :/");
         }
     }

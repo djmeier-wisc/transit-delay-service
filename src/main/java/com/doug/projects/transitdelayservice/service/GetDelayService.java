@@ -3,13 +3,15 @@ package com.doug.projects.transitdelayservice.service;
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
-import com.doug.projects.transitdelayservice.repository.DelayObjectRepository;
+import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
+import com.doug.projects.transitdelayservice.util.TransitDateUtil;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
+import java.time.ZoneId;
 import java.util.*;
 
 import static java.lang.Math.floor;
@@ -18,7 +20,7 @@ import static java.lang.Math.floor;
 @RequiredArgsConstructor
 @Slf4j
 public class GetDelayService {
-    private final DelayObjectRepository repository;
+    private final RouteTimestampRepository repository;
     private final RouteMapperService routesService;
 
     private static List<Double> getDelayDataForRoute(Long startTime, Integer units, double perUnitSecondLength, List<RouteTimestamp> timestampsForRoute) {
@@ -69,25 +71,17 @@ public class GetDelayService {
      */
     public LineGraphDataResponse getDelayFor(@Nullable Long startTime, @Nullable Long endTime, @Nullable Integer units, @Nullable String route) {
         log.info("Getting {} units of delays between {} and {} for route {}", units, startTime, endTime, route);
-        if (startTime == null) {
-            Calendar day = Calendar.getInstance();
-            day.set(Calendar.MILLISECOND, 0);
-            day.set(Calendar.MILLISECOND, 0);
-            day.set(Calendar.SECOND, 0);
-            day.set(Calendar.MINUTE, 0);
-            day.set(Calendar.HOUR_OF_DAY, 0);
-            day.set(Calendar.DATE, -7);
-            startTime = day.toInstant().getEpochSecond();
-        }
-        if (endTime == null) {
-            endTime = System.currentTimeMillis() / 1000;
-        }
-        if (units == null) {
-            units = 7;
-        }
-        if (startTime >= endTime) {
-            throw new IllegalArgumentException("Start time must be less than endTime");
-        }
+
+        //validations, if not set default
+        if (startTime == null) startTime = TransitDateUtil.getMidnightSixDaysAgo();
+
+        if (endTime == null) endTime = TransitDateUtil.getMidnightTonight();
+
+        if (units == null) units = 7;
+
+        if (startTime >= endTime) throw new IllegalArgumentException("startTime must be less than endTime");
+
+
         double perUnitSecondLength = (double) (endTime - startTime) / units;
 
         List<LineGraphData> lineGraphDatas = new ArrayList<>(units);
@@ -98,14 +92,12 @@ public class GetDelayService {
             List<Double> currData = getDelayDataForRoute(startTime, units, perUnitSecondLength, routeTimestamps);
             lineGraphDatas.add(getLineGraphData(route, currData));
         } else {
-            Map<String, List<RouteTimestamp>> routeTimestamps = repository.getRouteTimestampsBy(startTime, endTime);
-            for (String routeFriendlyName : routesService.getAllFriendlyNames()) {
+            Map<String, List<RouteTimestamp>> routeTimestamps = repository.getRouteTimestampsMapBy(startTime, endTime);
+            for (String routeFriendlyName : routeTimestamps.keySet()) {
                 List<RouteTimestamp> timestampsForRoute = routeTimestamps.get(routeFriendlyName);
                 if (timestampsForRoute == null) {
                     continue;
                 }
-                //to describe the most rec
-
                 List<Double> currData = getDelayDataForRoute(startTime, units, perUnitSecondLength, timestampsForRoute);
                 lineGraphDatas.add(getLineGraphData(routeFriendlyName, currData));
             }
@@ -117,13 +109,13 @@ public class GetDelayService {
             if (perUnitSecondLength >= dayInSeconds) {// if unit length we are going for is a day, set label to date format
                 dateFormat = new SimpleDateFormat("MM/dd/yy");
             } else {//if unit length is < a day, measure distance in HH:MM format
-                dateFormat = new SimpleDateFormat("MMM/dd/yy HH:mm:ss aa");
+                dateFormat = new SimpleDateFormat("MMM/dd/yy hh:mm:ss aa");
             }
+            dateFormat.setTimeZone(TimeZone.getTimeZone(ZoneId.of("America/Chicago")));
             columnLabels.add(dateFormat.format(new Date(finalCurrStartTime * 1000)));
         }
         //sorts lineGraphDatas by friendlyName from RouteMapperService
-        lineGraphDatas.sort((o1, o2) -> Integer.compare(routesService.getSortOrderFor(o1.getLineLabel()),
-                routesService.getSortOrderFor(o2.getLineLabel())));
+        lineGraphDatas.sort((o1, o2) -> Integer.compare(routesService.getSortOrderFor(o1.getLineLabel()), routesService.getSortOrderFor(o2.getLineLabel())));
         return new LineGraphDataResponse(lineGraphDatas, columnLabels);
     }
 }
