@@ -5,7 +5,5 @@ spring:
   codec:
     max-in-memory-size: 1000KB
 server:
-  port: 80
-  servlet:
-    context-path: "/api"
+  port: 8080
 doesCronRun: true
