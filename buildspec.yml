@@ -18,3 +18,6 @@ artifacts:
     - scripts/*.sh
     - files/*
     - appspec.yml
+cache:
+  paths:
+    - '/root/.m2/**/*'
