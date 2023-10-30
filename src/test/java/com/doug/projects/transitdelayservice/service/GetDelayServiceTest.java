@@ -3,6 +3,7 @@ package com.doug.projects.transitdelayservice.service;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
+import com.doug.projects.transitdelayservice.util.LineGraphUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -21,6 +22,8 @@ class GetDelayServiceTest {
     private RouteTimestampRepository repository;
     @Spy
     private RouteMapperService routeMapperService;
+    @Spy
+    private LineGraphUtil lineGraphUtil;
 
     private GetDelayService delayService;
 
@@ -28,7 +31,7 @@ class GetDelayServiceTest {
     void setup() {
         MockitoAnnotations.openMocks(this);
         routeMapperService.refreshMaps();
-        delayService = new GetDelayService(repository, routeMapperService);
+        delayService = new GetDelayService(repository, routeMapperService, lineGraphUtil);
     }
 
     @Test

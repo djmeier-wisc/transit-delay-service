@@ -25,8 +25,7 @@ public class RealtimeResponseAdaptor {
      * @return true if all required fields are not null
      */
     private static boolean validateRequiredFields(Entity entity) {
-        return !(entity.getTrip_update() == null ||
-                entity.getTrip_update().getTrip() == null ||
+        return !(entity.getTrip_update() == null || entity.getTrip_update().getTrip() == null ||
                 entity.getTrip_update().getTrip().getTrip_id() == null ||
                 entity.getTrip_update().getTrip().getRoute_id() == null ||
                 CollectionUtils.isEmpty(entity.getTrip_update().getStop_time_update()) ||
@@ -44,14 +43,10 @@ public class RealtimeResponseAdaptor {
      * @return the average delay of a trip entity
      */
     private static double getDelays(Entity entity, boolean getAbsoluteValue) {
-        return entity
-                .getTrip_update()
-                .getStop_time_update()
-                .stream().filter(e -> e.getDeparture() != null)
-                .map(e -> e.getDeparture().getDelay())
-                .mapToDouble(Integer::doubleValue).map(delay -> {
+        return entity.getTrip_update().getStop_time_update().stream().filter(e -> e.getDeparture() != null)
+                .map(e -> e.getDeparture().getDelay()).mapToDouble(Integer::doubleValue).map(delay -> {
                     return getAbsoluteValue ? Math.abs(delay) : delay; //apply absolute value to delay average
-                }).average().orElseGet(() -> 0);
+                }).average().orElse(0);
     }
 
     /**
@@ -64,26 +59,26 @@ public class RealtimeResponseAdaptor {
      */
     List<RouteTimestamp> convertFrom(RealtimeTransitResponse transitResponse) {
         int timestampFromMetro = transitResponse.getHeader().getTimestamp();
-        return transitResponse.getEntity().parallelStream().filter(RealtimeResponseAdaptor::validateRequiredFields).collect(Collectors.groupingBy(
-                e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update().getTrip().getRoute_id()))
-        )).entrySet().stream().map(entry -> {
-            var routeName = entry.getKey();
-            var entityList = entry.getValue();
-            RouteTimestamp rts = new RouteTimestamp();
+        return transitResponse.getEntity().parallelStream().filter(RealtimeResponseAdaptor::validateRequiredFields)
+                .collect(Collectors.groupingBy(e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update()
+                        .getTrip().getRoute_id())))).entrySet().stream().map(entry -> {
+                    var routeName = entry.getKey();
+                    var entityList = entry.getValue();
+                    RouteTimestamp rts = new RouteTimestamp();
 
-            rts.setRoute(routeName);
-            Double averageDelay =
-                    entityList.stream().mapToDouble(entity -> getDelays(entity, true)).average().orElseGet(() -> 0);
-            rts.setAverageDelay(averageDelay);
-            rts.setTimestamp(timestampFromMetro);
-            rts.setBusStatesList(entityList.stream().map(e -> {
-                BusStates busStates = new BusStates();
-                busStates.setTripId(Integer.valueOf(e.getTrip_update().getTrip().getTrip_id()));
-                busStates.setDelay((int) getDelays(e, false));
-                busStates.setClosestStopId(e.getTrip_update().getStop_time_update().get(0).getStop_id());
-                return busStates.toString();
-            }).collect(Collectors.toList()));
-            return rts;
-        }).collect(Collectors.toList());
+                    rts.setRoute(routeName);
+                    Double averageDelay =
+                            entityList.stream().mapToDouble(entity -> getDelays(entity, true)).average().orElse(0);
+                    rts.setAverageDelay(averageDelay);
+                    rts.setTimestamp(timestampFromMetro);
+                    rts.setBusStatesList(entityList.stream().map(e -> {
+                        BusStates busStates = new BusStates();
+                        busStates.setTripId(Integer.valueOf(e.getTrip_update().getTrip().getTrip_id()));
+                        busStates.setDelay((int) getDelays(e, false));
+                        busStates.setClosestStopId(e.getTrip_update().getStop_time_update().get(0).getStop_id());
+                        return busStates.toString();
+                    }).collect(Collectors.toList()));
+                    return rts;
+                }).collect(Collectors.toList());
     }
 }
