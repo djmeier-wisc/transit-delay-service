@@ -77,6 +77,14 @@ public class RouteTimestampRepository {
                 endTime, friendlyName).stream()).sorted(Comparator.comparing(RouteTimestamp::getTimestamp)).collect(Collectors.groupingBy(RouteTimestamp::getRoute));
     }
 
+    public Map<String, List<RouteTimestamp>> getRouteTimestampsMapBy(Number startTime, Number endTime,
+                                                                     List<String> routeNames) {
+        return routeNames.parallelStream()
+                .flatMap(friendlyName -> getRouteTimestampsBy(startTime, endTime, friendlyName).stream())
+                .sorted(Comparator.comparing(RouteTimestamp::getTimestamp))
+                .collect(Collectors.groupingBy(RouteTimestamp::getRoute));
+    }
+
     public List<RouteTimestamp> getRouteTimestampsBy(Number startTime, Number endTime) {
         return routeMapperService.getAllFriendlyNames().parallelStream().flatMap(friendlyName -> getRouteTimestampsBy(startTime, endTime, friendlyName).stream()).collect(Collectors.toList());
     }

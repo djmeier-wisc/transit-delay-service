@@ -11,11 +11,12 @@ import static java.lang.Math.abs;
 import static java.lang.Math.floor;
 
 public class RouteTimestampUtil {
-    public static List<Double> getMaxDelayForRouteInMinutes(Long startTime, Integer units, double perUnitSecondLength
-            , List<RouteTimestamp> timestampsForRoute) {
+    public static List<Double> getMaxDelayForRouteInMinutes(List<RouteTimestamp> timestampsForRoute, Long startTime,
+                                                            Long endTime, Integer units) {
         List<Double> currData = new ArrayList<>(units);
         int lastIndexUsed = 0;
         for (int currUnit = 0; currUnit < units; currUnit++) {
+            double perUnitSecondLength = (double) (endTime - startTime) / units;
             final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
             int currLastIndex = timestampsForRoute.size();
             for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
@@ -38,8 +39,8 @@ public class RouteTimestampUtil {
         return currData;
     }
 
-    public static List<Double> percentOnTime(Long startTime, Long endTime, Integer units,
-                                             List<RouteTimestamp> timestampsForRoute, Integer criteria) {
+    public static List<Double> percentOnTime(List<RouteTimestamp> timestampsForRoute, Long startTime, Long endTime,
+                                             Integer units, Integer criteria) {
         List<Double> currData = new ArrayList<>(units);
         double perUnitSecondLength = (double) (endTime - startTime) / units;
         int lastIndexUsed = 0;
@@ -104,9 +105,9 @@ public class RouteTimestampUtil {
         return busStates;
     }
 
-    public static List<Double> getAverageDelayDataForRouteInMinutes(Long startTime, Integer units,
-                                                                    double perUnitSecondLength,
-                                                                    List<RouteTimestamp> timestampsForRoute) {
+    public static List<Double> getAverageDelayDataForRouteInMinutes(List<RouteTimestamp> timestampsForRoute,
+                                                                    Long startTime, Long endTIme, Integer units) {
+        double perUnitSecondLength = (double) (endTIme - startTime) / units;
         List<Double> currData = new ArrayList<>(units);
         int lastIndexUsed = 0;
         for (int currUnit = 0; currUnit < units; currUnit++) {

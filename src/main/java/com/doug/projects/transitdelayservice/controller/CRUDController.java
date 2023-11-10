@@ -30,7 +30,7 @@ public class CRUDController {
         return ResponseEntity.ok(repository.getRouteTimestampsBy(startTime, endTime, route));
     }
 
-    @GetMapping("/v1/getAllRoutes")
+    @GetMapping("/v1/getAllRouteNames")
     public ResponseEntity<List<String>> getAllRoutes() {
         return ResponseEntity.ok(mapperService.getAllFriendlyNames().stream().sorted((o1, o2) -> Integer.compare(mapperService.getSortOrderFor(o1), mapperService.getSortOrderFor(o2))).collect(Collectors.toList()));
     }
