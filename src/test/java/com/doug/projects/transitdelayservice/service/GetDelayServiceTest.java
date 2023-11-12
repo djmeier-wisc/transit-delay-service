@@ -11,6 +11,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -40,16 +41,16 @@ class GetDelayServiceTest {
         Long startTime = 1609459200L;
         Long endTime = 1609545600L;
         Integer units = 7;
-        String route = "SampleRoute";
+        List<String> route = List.of("SampleRoute");
         RouteTimestamp rt1 =
                 RouteTimestamp.builder().timestamp(1609459210).route("SampleRoute").averageDelay(1.0).build();
         RouteTimestamp rt2 =
                 RouteTimestamp.builder().timestamp(1609459220).route("SampleRoute").averageDelay(1.0).build();
         List<RouteTimestamp> routeTimestamps = Arrays.asList(rt1, rt2);
-        when(repository.getRouteTimestampsBy(startTime, endTime, route)).thenReturn(routeTimestamps);
+        when(repository.getRouteTimestampsBy(startTime, endTime, route.get(0))).thenReturn(routeTimestamps);
 
         // Act
-        LineGraphDataResponse response = delayService.getDelayFor(startTime, endTime, units, route);
+        LineGraphDataResponse response = delayService.getAverageDelay(startTime, endTime, units, route);
 
         // Assert
         assertNotNull(response);
@@ -70,7 +71,7 @@ class GetDelayServiceTest {
         when(repository.getRouteTimestampsMapBy(startTime, endTime)).thenReturn(routeTimestamps);
 
         // Act
-        LineGraphDataResponse response = delayService.getDelayFor(startTime, endTime, units, null);
+        LineGraphDataResponse response = delayService.getAverageDelay(startTime, endTime, units, null);
 
         // Assert
         assertNotNull(response);
@@ -92,24 +93,24 @@ class GetDelayServiceTest {
 
         // Act and Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            delayService.getDelayFor(startTime, endTime, units, route);
+            delayService.getAverageDelay(startTime, endTime, units, Collections.singletonList(route));
         });
     }
 
     @Test
     public void testGetDelayForWhenTimesAndUnitsNotProvidedThenUseDefaultValues() {
         // Arrange
-        String route = "SampleRoute";
+        List<String> route = List.of("SampleRoute");
         List<RouteTimestamp> routeTimestamps = Arrays.asList(new RouteTimestamp(), new RouteTimestamp());
-        when(repository.getRouteTimestampsBy(null, null, route)).thenReturn(routeTimestamps);
+        when(repository.getRouteTimestampsBy(null, null, route.get(0))).thenReturn(routeTimestamps);
 
         // Act
-        LineGraphDataResponse response = delayService.getDelayFor(null, null, null, route);
+        LineGraphDataResponse response = delayService.getAverageDelay(null, null, null, route);
 
         // Assert
         assertNotNull(response);
         assertEquals(1, response.getDatasets().size());
         assertEquals(7, response.getLabels().size());
-        assertEquals(route, response.getDatasets().get(0).getLineLabel());
+        assertEquals(route.get(0), response.getDatasets().get(0).getLineLabel());
     }
 }
