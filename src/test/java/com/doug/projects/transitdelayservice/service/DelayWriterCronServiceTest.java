@@ -36,7 +36,7 @@ public class DelayWriterCronServiceTest {
         RealtimeTransitResponse transitResponse = new RealtimeTransitResponse();
         Header head = new Header();
         Entity entity = new Entity();
-        head.setTimestamp((int) System.currentTimeMillis() / 1000);
+        head.setTimestamp(System.currentTimeMillis() / 1000);
         transitResponse.setHeader(head);
         transitResponse.setEntity(List.of(entity));
         List<RouteTimestamp> routeTimestamps = new ArrayList<>();
@@ -65,7 +65,7 @@ public class DelayWriterCronServiceTest {
         RealtimeTransitResponse transitResponse = new RealtimeTransitResponse();
         Header head = new Header();
         Entity entity = new Entity();
-        head.setTimestamp((int) System.currentTimeMillis() / 1000);
+        head.setTimestamp(System.currentTimeMillis() / 1000);
         transitResponse.setHeader(head);
         transitResponse.setEntity(List.of(entity));
         List<RouteTimestamp> routeTimestamps = new ArrayList<>();

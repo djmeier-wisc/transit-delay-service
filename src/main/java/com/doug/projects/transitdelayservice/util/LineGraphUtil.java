@@ -2,7 +2,7 @@ package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.service.RouteMapperService;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.TimeZone;
 
 @Component
-@RequiredArgsConstructor
+@AllArgsConstructor
 public class LineGraphUtil {
-    private final RouteMapperService routesService;
+    private RouteMapperService routesService;
 
     public static List<String> getColumnLabels(Long startTime, Long endTime, Integer units) {
         double perUnitSecondLength = (double) (endTime - startTime) / units;
@@ -39,7 +39,7 @@ public class LineGraphUtil {
     public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData) {
         LineGraphData lineGraphData = new LineGraphData();
         lineGraphData.setLineLabel(routeFriendlyName);
-        lineGraphData.setTension(.3);
+        lineGraphData.setTension(0.0);
         lineGraphData.setData(currData);
         lineGraphData.setBorderColor(routesService.getColorFor(routeFriendlyName));
         return lineGraphData;

@@ -58,7 +58,7 @@ public class RealtimeResponseAdaptor {
      * @return a list of routeTimestamps
      */
     List<RouteTimestamp> convertFrom(RealtimeTransitResponse transitResponse) {
-        int timestampFromMetro = transitResponse.getHeader().getTimestamp();
+        Long timestampFromMetro = transitResponse.getHeader().getTimestamp();
         return transitResponse.getEntity().parallelStream().filter(RealtimeResponseAdaptor::validateRequiredFields)
                 .collect(Collectors.groupingBy(e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update()
                         .getTrip().getRoute_id())))).entrySet().stream().map(entry -> {

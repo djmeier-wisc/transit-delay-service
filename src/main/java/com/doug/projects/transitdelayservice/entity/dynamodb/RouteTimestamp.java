@@ -21,7 +21,7 @@ public class RouteTimestamp {
     /**
      * The timestamp, gathered from GTFS realtime feed. DO NOT USE SYSTEM TIMESTAMP to avoid duplication
      */
-    public Integer timestamp;
+    public Long timestamp;
     /**
      * The list of routes, in the format of <code>BusStates</code> toString method. delay%closestStopId%tripId
      */
@@ -37,7 +37,7 @@ public class RouteTimestamp {
     }
 
     @DynamoDbSortKey
-    public Integer getTimestamp() {
+    public Long getTimestamp() {
         return timestamp;
     }
 }

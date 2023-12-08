@@ -1,6 +1,7 @@
 package com.doug.projects.transitdelayservice;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
+import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -15,6 +16,7 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 @SpringBootApplication
 @EnableScheduling
 @EnableWebFlux
+@OpenAPIDefinition
 public class TransitDelayServiceApplication {
 
     public static void main(String[] args) {

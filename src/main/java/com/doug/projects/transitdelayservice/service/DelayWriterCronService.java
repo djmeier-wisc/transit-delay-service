@@ -55,9 +55,8 @@ public class DelayWriterCronService {
                 throw new RuntimeException("Failed to write route timestamps");
             }
         } catch (Exception e) {
-
+            log.error("Failed to write route timestamps", e);
         }
     }
-
 
 }

@@ -8,10 +8,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Component
@@ -32,10 +29,13 @@ public class RouteMapperService {
             CsvSchema schema = CsvSchema.emptySchema().withHeader();
             MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper.readerWithSchemaFor(RoutesAttributes.class).with(schema).readValues(file);
             List<RoutesAttributes> routesAttributes = routesAttributesIterator.readAll();
-            routeIdToServiceNameMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name)));
-            serviceNameToColorMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" + ra.getRoute_color())));
-            serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name,
-                    RoutesAttributes::getRoute_sort_order)));
+            routeIdToServiceNameMap.putAll(routesAttributes.stream()
+                    .collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name,
+                            (first, second) -> second)));
+            serviceNameToColorMap.putAll(routesAttributes.stream()
+                    .collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" +
+                            ra.getRoute_color(), (first, second) -> second)));
+            serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, RoutesAttributes::getRoute_sort_order, (first, second) -> second)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to load values into map!", e);
         }
@@ -50,13 +50,13 @@ public class RouteMapperService {
     }
 
     public List<String> getAllFriendlyNames() {
-        return new ArrayList<>(routeIdToServiceNameMap.values());
+        return new ArrayList<>(new HashSet<>(routeIdToServiceNameMap.values()));
     }
 
     /**
      * Gets the sort order for a given friendly name. Returns -1 if the friendly name is not found.
      *
-     * @param friendlyName the friendly name to get the sort order for.
+     * @param routeFriendlyName the friendly name to get the sort order for.
      * @return the sort order for the given friendly name.
      */
     public Integer getSortOrderFor(String routeFriendlyName) {

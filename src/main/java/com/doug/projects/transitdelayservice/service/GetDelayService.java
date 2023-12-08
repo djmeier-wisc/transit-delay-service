@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -67,6 +68,16 @@ public class GetDelayService {
                 RouteTimestampUtil::getMaxDelayForRouteInMinutes);
     }
 
+    /**
+     * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
+     *
+     * @param startTime the startTime to search the db for, in unix time. If null, use midnight 6 days ago
+     * @param endTime   the endTime to search the db for, in unix time. If null, use midnight tonight.
+     * @param units     the number of columns in the graph. If null, use 7
+     * @param routes    the routes to search for in the db. If null, use getAllFriendlyNames
+     * @param converter the function run for after gathering all of the routeTimestamps.
+     * @return a graph, beginning at startTime, ending at endTime, over the number of units
+     */
     public LineGraphDataResponse genericLineGraphConverter(Long startTime, Long endTime, Integer units,
                                                            List<String> routes, RouteTimestampConverter converter) {
         final Long finalStartTime = startTime == null ? TransitDateUtil.getMidnightSixDaysAgo() : startTime;
@@ -76,23 +87,42 @@ public class GetDelayService {
                 CollectionUtils.isEmpty(routes) ? routeMapperService.getAllFriendlyNames() : routes;
 
         if (finalStartTime >= finalEndTime)
-            throw new IllegalArgumentException("startTime must be less than endTime");
+            throw new IllegalArgumentException("startTime must be greater than endTime");
 
         LineGraphDataResponse response = new LineGraphDataResponse();
-        double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
 
         response.setLabels(getColumnLabels(finalStartTime, finalEndTime, finalUnits));
         var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes);
-        List<LineGraphData> lineGraphDataList = routeTimestampsMap.keySet().stream().map(routeFriendlyName -> {
-            List<RouteTimestamp> timestampsForRoute =
-                    routeTimestampsMap.getOrDefault(routeFriendlyName, Collections.emptyList());
-            List<Double> currData = Collections.emptyList();
-            try {
-                currData = converter.convert(timestampsForRoute, finalStartTime, finalEndTime, finalUnits);
+        List<LineGraphData> lineGraphDataList =
+                routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
+                    List<RouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
+                    if (timestampsForRoute == null) {
+                        timestampsForRoute = Collections.emptyList();
+                    }
+                    List<Double> currData = new ArrayList<>(finalUnits);
+                    try {
+                        double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
+                        int lastIndexUsed = 0;
+                        for (int currUnit = 0; currUnit < finalUnits; currUnit++) {
+                            final long finalCurrEndTime =
+                                    (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
+                            int currLastIndex = timestampsForRoute.size();
+                            for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
+                                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                                    currLastIndex = i;
+                                    break;
+                                }
+                            }
+                            Double converterResult =
+                                    converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
+                            currData.add(converterResult);
+                            //get ready for next iteration
+                            lastIndexUsed = currLastIndex;
+                        }
             } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            return lineGraphUtil.getLineGraphData(routeFriendlyName, currData);
+                        log.error("Failed to create for friendlyName: {}", routeFriendlyName, e);
+                    }
+                    return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
         }).collect(Collectors.toList());
         lineGraphUtil.sortByGTFSSortOrder(lineGraphDataList);
         response.setDatasets(lineGraphDataList);

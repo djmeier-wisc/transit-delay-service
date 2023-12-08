@@ -12,5 +12,5 @@ import lombok.NoArgsConstructor;
 public class Header {
     private String gtfs_realtime_version;
     private Integer incrementality;
-    private Integer timestamp;
+    private Long timestamp;
 }

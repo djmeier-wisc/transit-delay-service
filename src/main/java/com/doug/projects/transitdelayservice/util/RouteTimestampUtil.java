@@ -4,71 +4,40 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import org.springframework.util.StringUtils;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Objects;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.floor;
 
 public class RouteTimestampUtil {
-    public static List<Double> getMaxDelayForRouteInMinutes(List<RouteTimestamp> timestampsForRoute, Long startTime,
-                                                            Long endTime, Integer units) {
-        List<Double> currData = new ArrayList<>(units);
-        int lastIndexUsed = 0;
-        for (int currUnit = 0; currUnit < units; currUnit++) {
-            double perUnitSecondLength = (double) (endTime - startTime) / units;
-            final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-            int currLastIndex = timestampsForRoute.size();
-            for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                    currLastIndex = i;
-                    break;
-                }
-            }
-            OptionalInt averageDelay = timestampsForRoute.subList(lastIndexUsed, currLastIndex).stream()
-                    .mapToInt(RouteTimestampUtil::getMaxDelayFromBusStatesList).max();
-            if (averageDelay.isPresent()) {
-                double timeInMinutes = ((double) averageDelay.getAsInt()) / 60; //convert to minutes
-                currData.add(floor(timeInMinutes * 1000) / 1000);
-            } else {
-                currData.add(null);
-            }
-            //get ready for next iteration
-            lastIndexUsed = currLastIndex;
+    public static Double getMaxDelayForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {
+
+        OptionalInt averageDelay =
+                timestampsForRoute.stream().mapToInt(RouteTimestampUtil::getMaxDelayFromBusStatesList).max();
+        if (averageDelay.isEmpty()) {
+            return null;
         }
-        return currData;
+        double timeInMinutes = ((double) averageDelay.getAsInt()) / 60; //convert to minutes
+        return floor(timeInMinutes * 1000) / 1000;
     }
 
-    public static List<Double> percentOnTime(List<RouteTimestamp> timestampsForRoute, Long startTime, Long endTime,
-                                             Integer units, Integer criteria) {
-        List<Double> currData = new ArrayList<>(units);
-        double perUnitSecondLength = (double) (endTime - startTime) / units;
-        int lastIndexUsed = 0;
-        for (int currUnit = 0; currUnit < units; currUnit++) {
-            final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-            int currLastIndex = timestampsForRoute.size();
-            for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                    currLastIndex = i;
-                    break;
-                }
-            }
-            List<Integer> allBusStates = timestampsForRoute.subList(lastIndexUsed, currLastIndex).stream()
-                    .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
-                    .map(BusStates::getDelay).collect(Collectors.toList());
+    public static Double percentOnTime(List<RouteTimestamp> timestampsForRoute, Integer criteria) {
 
-            Double percentOnTime =
-                    ((double) allBusStates.stream().filter(delay -> Math.abs(delay) / 60 <= criteria).count() /
-                            allBusStates.size()) * 100;
-            if (allBusStates.isEmpty()) {
-                currData.add(null);
-            } else {
-                currData.add(percentOnTime);
-            }
-            //get ready for next iteration
-            lastIndexUsed = currLastIndex;
+        List<Integer> allBusStates = timestampsForRoute.stream()
+                .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
+                .map(BusStates::getDelay).toList();
+
+        Double percentOnTime =
+                ((double) allBusStates.stream().filter(delay -> Math.abs(delay) / 60 <= criteria).count() /
+                        allBusStates.size()) * 100;
+        if (allBusStates.isEmpty()) {
+            return null;
         }
-        return currData;
+        return percentOnTime;
+
     }
 
     public static Integer getMaxDelayFromBusStatesList(RouteTimestamp rt) {
@@ -105,31 +74,14 @@ public class RouteTimestampUtil {
         return busStates;
     }
 
-    public static List<Double> getAverageDelayDataForRouteInMinutes(List<RouteTimestamp> timestampsForRoute,
-                                                                    Long startTime, Long endTIme, Integer units) {
-        double perUnitSecondLength = (double) (endTIme - startTime) / units;
-        List<Double> currData = new ArrayList<>(units);
-        int lastIndexUsed = 0;
-        for (int currUnit = 0; currUnit < units; currUnit++) {
-            final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-            int currLastIndex = timestampsForRoute.size();
-            for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                    currLastIndex = i;
-                    break;
-                }
-            }
-            OptionalDouble averageDelay = timestampsForRoute.subList(lastIndexUsed, currLastIndex).stream()
-                    .mapToDouble(RouteTimestamp::getAverageDelay).average();
-            if (averageDelay.isPresent()) {
-                Double timeInMinutes = averageDelay.getAsDouble() / 60; //convert to minutes
-                currData.add(floor(timeInMinutes * 1000) / 1000);
-            } else {
-                currData.add(null);
-            }
-            //get ready for next iteration
-            lastIndexUsed = currLastIndex;
+    public static Double getAverageDelayDataForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {
+
+        OptionalDouble averageDelay =
+                timestampsForRoute.stream().mapToDouble(RouteTimestamp::getAverageDelay).average();
+        if (averageDelay.isEmpty()) {
+            return null;
         }
-        return currData;
+        Double timeInMinutes = averageDelay.getAsDouble() / 60; //convert to minutes
+        return floor(timeInMinutes * 1000) / 1000;
     }
 }
