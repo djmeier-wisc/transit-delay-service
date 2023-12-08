@@ -4,118 +4,128 @@ import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
+import com.doug.projects.transitdelayservice.util.LineGraphUtil;
+import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
-import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
-import java.text.SimpleDateFormat;
-import java.time.ZoneId;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
-import static java.lang.Math.floor;
+import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GetDelayService {
     private final RouteTimestampRepository repository;
-    private final RouteMapperService routesService;
+    private final RouteMapperService routeMapperService;
+    private final LineGraphUtil lineGraphUtil;
 
-    private static List<Double> getDelayDataForRoute(Long startTime, Integer units, double perUnitSecondLength, List<RouteTimestamp> timestampsForRoute) {
-        List<Double> currData = new ArrayList<>(units);
-        int lastIndexUsed = 0;
-        for (int currUnit = 0; currUnit < units; currUnit++) {
-            final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-            int currLastIndex = timestampsForRoute.size();
-            for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                    currLastIndex = i;
-                    break;
-                }
-            }
-            OptionalDouble averageDelay = timestampsForRoute.subList(lastIndexUsed, currLastIndex).stream().mapToDouble(RouteTimestamp::getAverageDelay).average();
-            if (averageDelay.isPresent()) {
-                currData.add(floor(averageDelay.getAsDouble()));
-            } else {
-                currData.add(null);
-            }
-            //get ready for next iteration
-            lastIndexUsed = currLastIndex;
-        }
-        return currData;
-    }
-
-    private LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData) {
-        LineGraphData lineGraphData = new LineGraphData();
-        lineGraphData.setLineLabel(routeFriendlyName);
-        lineGraphData.setTension(.3);
-        lineGraphData.setData(currData);
-        lineGraphData.setBorderColor(routesService.getColorFor(routeFriendlyName));
-        return lineGraphData;
-    }
 
     /**
-     * Gets the average delay of <code>route</code> between <code>startTime</code> and <code>endTime</code>, returning a
-     * list of size <code>units</code>. Returns <code>LineGraphResponse</code>, to be used with Chart.JS formatting.
+     * Gets the average delay of <code>routes</code> between <code>startTime</code> and <code>endTime</code>, returning
+     * a list of size <code>units</code>. Returns <code>LineGraphResponse</code>, to be used with Chart.JS formatting.
      *
      * @param startTime the time to begin search by, in unix epoch seconds
      * @param endTime   the time to end search by, in unix epoch seconds
      * @param units     how 'wide' the graph will be
-     * @param route     the route to search by. NOTE: if null is supplied, all routes will be searched.
+     * @param routes    the routes to search by. NOTE: if null is supplied, all routes will be searched.
      * @return graph a Chart.js LineGraph data object, <code>units</code>. Note that labels will eithe be the date (if
      * the distance measured by each unit is a day or longer), or date & time (if the distance measured by each unit is
      * less than a day). Delay over the period is averaged to the thousandths decimal place.
      * @throws IllegalArgumentException if startTime is >= endTime
      */
-    public LineGraphDataResponse getDelayFor(@Nullable Long startTime, @Nullable Long endTime, @Nullable Integer units, @Nullable String route) {
-        log.info("Getting {} units of delays between {} and {} for route {}", units, startTime, endTime, route);
-
+    public LineGraphDataResponse getAverageDelay(Long startTime, Long endTime, Integer units, List<String> routes) throws IllegalArgumentException {
+        log.info("Getting {} units of delays between {} and {} for routes {}", units, startTime, endTime, routes);
         //validations, if not set default
-        if (startTime == null) startTime = TransitDateUtil.getMidnightSixDaysAgo();
-
-        if (endTime == null) endTime = TransitDateUtil.getMidnightTonight();
-
-        if (units == null) units = 7;
-
-        if (startTime >= endTime) throw new IllegalArgumentException("startTime must be less than endTime");
+        return genericLineGraphConverter(startTime, endTime, units, routes,
+                RouteTimestampUtil::getAverageDelayDataForRouteInMinutes);
+    }
 
 
-        double perUnitSecondLength = (double) (endTime - startTime) / units;
+    /**
+     * Gets the MAX delay of <code>routes</code> between <code>startTime</code> and <code>endTime</code>, returning a
+     * list of <code>LineGraphData</code> of size <code>units</code>.
+     *
+     * @param startTime the time to begin search by, in unix epoch seconds
+     * @param endTime   the time to end search by, in unix epoch seconds
+     * @param units     how 'wide' the graph will be
+     * @param routes    the routes to search by. NOTE: if null is supplied, all routes will be searched.
+     * @return graph a Chart.js LineGraph data object, <code>units</code>. Note that labels will eithe be the date (if
+     * the distance measured by each unit is a day or longer), or date & time (if the distance measured by each unit is
+     * less than a day). Delay over the period is averaged to the thousandths decimal place.
+     * @throws IllegalArgumentException if startTime is >= endTime
+     */
+    public LineGraphDataResponse getMaxDelayFor(Long startTime, Long endTime, Integer units, List<String> routes) throws IllegalArgumentException {
+        //validations, if not set default
+        return genericLineGraphConverter(startTime, endTime, units, routes,
+                RouteTimestampUtil::getMaxDelayForRouteInMinutes);
+    }
 
-        List<LineGraphData> lineGraphDatas = new ArrayList<>(units);
-        List<String> columnLabels = new ArrayList<>(units);
+    /**
+     * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
+     *
+     * @param startTime the startTime to search the db for, in unix time. If null, use midnight 6 days ago
+     * @param endTime   the endTime to search the db for, in unix time. If null, use midnight tonight.
+     * @param units     the number of columns in the graph. If null, use 7
+     * @param routes    the routes to search for in the db. If null, use getAllFriendlyNames
+     * @param converter the function run for after gathering all of the routeTimestamps.
+     * @return a graph, beginning at startTime, ending at endTime, over the number of units
+     */
+    public LineGraphDataResponse genericLineGraphConverter(Long startTime, Long endTime, Integer units,
+                                                           List<String> routes, RouteTimestampConverter converter) {
+        final Long finalStartTime = startTime == null ? TransitDateUtil.getMidnightSixDaysAgo() : startTime;
+        final Long finalEndTime = endTime == null ? TransitDateUtil.getMidnightTonight() : endTime;
+        final Integer finalUnits = units == null ? 7 : units;
+        final List<String> finalRoutes =
+                CollectionUtils.isEmpty(routes) ? routeMapperService.getAllFriendlyNames() : routes;
 
-        if (route != null) {
-            List<RouteTimestamp> routeTimestamps = repository.getRouteTimestampsBy(startTime, endTime, route);
-            List<Double> currData = getDelayDataForRoute(startTime, units, perUnitSecondLength, routeTimestamps);
-            lineGraphDatas.add(getLineGraphData(route, currData));
-        } else {
-            Map<String, List<RouteTimestamp>> routeTimestamps = repository.getRouteTimestampsMapBy(startTime, endTime);
-            for (String routeFriendlyName : routeTimestamps.keySet()) {
-                List<RouteTimestamp> timestampsForRoute = routeTimestamps.get(routeFriendlyName);
-                if (timestampsForRoute == null) {
-                    continue;
-                }
-                List<Double> currData = getDelayDataForRoute(startTime, units, perUnitSecondLength, timestampsForRoute);
-                lineGraphDatas.add(getLineGraphData(routeFriendlyName, currData));
-            }
-        }
-        for (int currUnit = 0; currUnit < units; currUnit++) {
-            final long finalCurrStartTime = (long) (startTime + (perUnitSecondLength * currUnit));
-            final long dayInSeconds = 24 * 60 * 60; //the number of seconds in a day
-            SimpleDateFormat dateFormat;
-            if (perUnitSecondLength >= dayInSeconds) {// if unit length we are going for is a day, set label to date format
-                dateFormat = new SimpleDateFormat("MM/dd/yy");
-            } else {//if unit length is < a day, measure distance in HH:MM format
-                dateFormat = new SimpleDateFormat("MMM/dd/yy hh:mm:ss aa");
-            }
-            dateFormat.setTimeZone(TimeZone.getTimeZone(ZoneId.of("America/Chicago")));
-            columnLabels.add(dateFormat.format(new Date(finalCurrStartTime * 1000)));
-        }
-        //sorts lineGraphDatas by friendlyName from RouteMapperService
-        lineGraphDatas.sort((o1, o2) -> Integer.compare(routesService.getSortOrderFor(o1.getLineLabel()), routesService.getSortOrderFor(o2.getLineLabel())));
-        return new LineGraphDataResponse(lineGraphDatas, columnLabels);
+        if (finalStartTime >= finalEndTime)
+            throw new IllegalArgumentException("startTime must be greater than endTime");
+
+        LineGraphDataResponse response = new LineGraphDataResponse();
+
+        response.setLabels(getColumnLabels(finalStartTime, finalEndTime, finalUnits));
+        var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes);
+        List<LineGraphData> lineGraphDataList =
+                routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
+                    List<RouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
+                    if (timestampsForRoute == null) {
+                        timestampsForRoute = Collections.emptyList();
+                    }
+                    List<Double> currData = new ArrayList<>(finalUnits);
+                    try {
+                        double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
+                        int lastIndexUsed = 0;
+                        for (int currUnit = 0; currUnit < finalUnits; currUnit++) {
+                            final long finalCurrEndTime =
+                                    (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
+                            int currLastIndex = timestampsForRoute.size();
+                            for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
+                                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                                    currLastIndex = i;
+                                    break;
+                                }
+                            }
+                            Double converterResult =
+                                    converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
+                            currData.add(converterResult);
+                            //get ready for next iteration
+                            lastIndexUsed = currLastIndex;
+                        }
+            } catch (Exception e) {
+                        log.error("Failed to create for friendlyName: {}", routeFriendlyName, e);
+                    }
+                    return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
+        }).collect(Collectors.toList());
+        lineGraphUtil.sortByGTFSSortOrder(lineGraphDataList);
+        response.setDatasets(lineGraphDataList);
+        return response;
     }
 }

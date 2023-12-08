@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.2.0-M3</version>
+        <version>3.0.12</version>
 		<relativePath/>
 	</parent>
 	<groupId>com.doug.projects</groupId>
@@ -14,10 +14,15 @@
 	<name>transit-delay-service</name>
 	<description>Demo project for Spring Boot</description>
 	<properties>
-		<java.version>11</java.version>
+		<java.version>17</java.version>
 	</properties>
 	<dependencyManagement>
 		<dependencies>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+                <version>2.2.0</version>
+            </dependency>
 			<dependency>
 				<groupId>software.amazon.awssdk</groupId>
 				<artifactId>bom</artifactId>
@@ -28,10 +33,14 @@
 		</dependencies>
 	</dependencyManagement>
 	<dependencies>
-
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>2.2.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
@@ -44,27 +53,17 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>io.projectreactor</groupId>
-			<artifactId>reactor-test</artifactId>
-			<scope>test</scope>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>
-			<artifactId>dynamodb-enhanced</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>software.amazon.awssdk</groupId>
-			<artifactId>dynamodb</artifactId>
+            <artifactId>dynamodb-enhanced</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.fasterxml.jackson.dataformat</groupId>
 			<artifactId>jackson-dataformat-csv</artifactId>
-			<version>2.16.0-rc1</version>
-		</dependency>
-		<dependency>
-			<groupId>org.springdoc</groupId>
-			<artifactId>springdoc-openapi-ui</artifactId>
-			<version>1.2.32</version>
 		</dependency>
 	</dependencies>
 
@@ -73,7 +72,17 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
-				<version>${project.parent.version}</version>
+                <configuration>
+                    <image>
+                        <builder>paketobuildpacks/builder-jammy-tiny:latest</builder>
+                    </image>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
 			</plugin>
 		</plugins>
 	</build>

@@ -50,7 +50,7 @@ public class RealtimeResponseAdaptorTest {
     @Test
     public void checkProperConversion() {
         RealtimeTransitResponse realtimeTransitResponse = new RealtimeTransitResponse();
-        realtimeTransitResponse.setHeader(Header.builder().timestamp(123).build());
+        realtimeTransitResponse.setHeader(Header.builder().timestamp(123L).build());
         List<Entity> entityList = new ArrayList<>();
         entityList.add(Entity.builder().trip_update(generateTripUpdate()).build());
         entityList.add(Entity.builder().trip_update(generateTripUpdate()).build());
@@ -59,14 +59,15 @@ public class RealtimeResponseAdaptorTest {
         List<RouteTimestamp> routeTimestamps = realtimeResponseAdaptor.convertFrom(realtimeTransitResponse);
 
         assertNotNull(routeTimestamps);
-        assertEquals(List.of(RouteTimestamp.builder().route("routeId").timestamp(123).busStatesList(List.of("40#stop3" +
+        assertEquals(List.of(RouteTimestamp.builder().route("routeId").timestamp(123L)
+                .busStatesList(List.of("40" + "#stop3" +
                 "#28", "64#stop0#97")).averageDelay(52.5).build()), routeTimestamps);
     }
 
     @Test
     public void assertSize() {
         RealtimeTransitResponse realtimeTransitResponse = new RealtimeTransitResponse();
-        realtimeTransitResponse.setHeader(Header.builder().timestamp(123).build());
+        realtimeTransitResponse.setHeader(Header.builder().timestamp(123L).build());
         List<Entity> entityList = new ArrayList<>();
         entityList.add(Entity.builder().trip_update(generateTripUpdate()).build());
         entityList.add(Entity.builder().trip_update(generateTripUpdate()).build());

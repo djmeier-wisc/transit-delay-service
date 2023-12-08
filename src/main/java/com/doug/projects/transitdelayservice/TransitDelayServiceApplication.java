@@ -2,7 +2,6 @@ package com.doug.projects.transitdelayservice;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
-import io.swagger.v3.oas.annotations.info.Info;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -17,11 +16,7 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 @SpringBootApplication
 @EnableScheduling
 @EnableWebFlux
-@OpenAPIDefinition(info = @Info(
-        title = "Transit-Delay-Service",
-        version = "1.0",
-        description = "Service to measure the average difference from schedule for Metro Transit in Madison, WI"
-))
+@OpenAPIDefinition
 public class TransitDelayServiceApplication {
 
     public static void main(String[] args) {

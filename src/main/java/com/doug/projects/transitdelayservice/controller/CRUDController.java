@@ -4,19 +4,19 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
 import com.doug.projects.transitdelayservice.service.RouteMapperService;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Controller
+@RestController
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "www.my-precious-time.com"})
 public class CRUDController {
     private final RouteTimestampRepository repository;
     private final RouteMapperService mapperService;
@@ -30,7 +30,8 @@ public class CRUDController {
         return ResponseEntity.ok(repository.getRouteTimestampsBy(startTime, endTime, route));
     }
 
-    @GetMapping("/v1/getAllRoutes")
+    @GetMapping("/v1/getAllRouteNames")
+    @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
     public ResponseEntity<List<String>> getAllRoutes() {
         return ResponseEntity.ok(mapperService.getAllFriendlyNames().stream().sorted((o1, o2) -> Integer.compare(mapperService.getSortOrderFor(o1), mapperService.getSortOrderFor(o2))).collect(Collectors.toList()));
     }
