@@ -23,7 +23,7 @@ public class RouteTimestamp {
      */
     public Long timestamp;
     /**
-     * The list of routes, in the format of <code>BusStates</code> toString method. delay%closestStopId%tripId
+     * The list of routes, in the format of <code>BusState</code> toString method. delay%closestStopId%tripId
      */
     public List<String> busStatesList;
     /**

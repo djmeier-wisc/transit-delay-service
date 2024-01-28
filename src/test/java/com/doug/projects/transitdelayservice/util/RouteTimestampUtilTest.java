@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,7 +61,7 @@ class RouteTimestampUtilTest {
     void testExtractBusStates() {
         String stringToParse = "10#stopId#123";
 
-        BusStates result = RouteTimestampUtil.extractBusStates(stringToParse);
+        BusState result = RouteTimestampUtil.extractBusStates(stringToParse);
         assertEquals(10, result.getDelay().intValue());
         assertEquals("stopId", result.getClosestStopId());
         assertEquals(123, result.getTripId());

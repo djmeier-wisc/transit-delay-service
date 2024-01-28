@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import org.springframework.util.StringUtils;
 
@@ -28,7 +28,7 @@ public class RouteTimestampUtil {
 
         List<Integer> allBusStates = timestampsForRoute.stream()
                 .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
-                .map(BusStates::getDelay).toList();
+                .map(BusState::getDelay).toList();
 
         Double percentOnTime =
                 ((double) allBusStates.stream().filter(delay -> Math.abs(delay) / 60 <= criteria).count() /
@@ -59,11 +59,11 @@ public class RouteTimestampUtil {
     /**
      * Deserializes busStates object from stringToParse.
      *
-     * @param stringToParse string representation of busStates object. See toString of BusStates
+     * @param stringToParse string representation of busStates object. See toString of BusState
      * @return busStates object deserialized from stringToParse.
      */
-    public static BusStates extractBusStates(String stringToParse) {
-        BusStates busStates = new BusStates();
+    public static BusState extractBusStates(String stringToParse) {
+        BusState busStates = new BusState();
         String[] vals = stringToParse.split("#");
         Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
         String closestStopId = vals.length < 2 ? null : vals[1];

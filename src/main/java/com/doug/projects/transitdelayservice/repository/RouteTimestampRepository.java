@@ -69,12 +69,7 @@ public class RouteTimestampRepository {
                 QueryConditional.sortBetween(
                         r -> r.partitionValue(routeName).sortValue(startTime),
                         r -> r.partitionValue(routeName).sortValue(endTime));
-        return delayTable.query(queryConditional).items().stream().collect(Collectors.toList());
-    }
-
-    public Map<String, List<RouteTimestamp>> getRouteTimestampsMapBy(Number startTime, Number endTime) {
-        return routeMapperService.getAllFriendlyNames().parallelStream().flatMap(friendlyName -> getRouteTimestampsBy(startTime,
-                endTime, friendlyName).stream()).sorted(Comparator.comparing(RouteTimestamp::getTimestamp)).collect(Collectors.groupingBy(RouteTimestamp::getRoute));
+        return delayTable.query(queryConditional).items().stream().toList();
     }
 
     public Map<String, List<RouteTimestamp>> getRouteTimestampsMapBy(Number startTime, Number endTime,
@@ -86,6 +81,7 @@ public class RouteTimestampRepository {
     }
 
     public List<RouteTimestamp> getRouteTimestampsBy(Number startTime, Number endTime) {
-        return routeMapperService.getAllFriendlyNames().parallelStream().flatMap(friendlyName -> getRouteTimestampsBy(startTime, endTime, friendlyName).stream()).collect(Collectors.toList());
+        return routeMapperService.getAllFriendlyNames().parallelStream()
+                .flatMap(friendlyName -> getRouteTimestampsBy(startTime, endTime, friendlyName).stream()).toList();
     }
 }

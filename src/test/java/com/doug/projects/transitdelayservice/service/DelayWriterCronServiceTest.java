@@ -23,10 +23,10 @@ public class DelayWriterCronServiceTest {
     private RouteTimestampRepository routeTimestampRepository;
 
     @Mock
-    private RealtimeMetroService realtimeMetroService;
+    private GtfsRtFeedService realtimeMetroService;
 
     @Mock
-    private RealtimeResponseAdaptor adaptor;
+    private RealtimeResponseConverter adaptor;
 
     @InjectMocks
     private DelayWriterCronService delayWriterCronService;

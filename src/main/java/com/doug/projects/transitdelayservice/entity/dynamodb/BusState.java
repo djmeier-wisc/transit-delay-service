@@ -7,7 +7,8 @@ import lombok.Setter;
 @NoArgsConstructor
 @Getter
 @Setter
-public class BusStates {
+//An individual bus along a route. Includes information like what its next stop is, how delayed it is, and more
+public class BusState {
     private Integer delay;
     private String closestStopId;
     private Integer tripId;
