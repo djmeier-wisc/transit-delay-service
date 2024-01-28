@@ -1,6 +1,8 @@
 package com.doug.projects.transitdelayservice;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.StopTime;
+import com.doug.projects.transitdelayservice.entity.dynamodb.Trip;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -31,6 +33,16 @@ public class TransitDelayServiceApplication {
     @Bean
     public DynamoDbTable<RouteTimestamp> provideTable(DynamoDbEnhancedClient enhancedClient) {
         return enhancedClient.table("dev_msn_route_timestamp", TableSchema.fromBean(RouteTimestamp.class));
+    }
+
+    @Bean
+    public DynamoDbTable<StopTime> provideStopTimesTable(DynamoDbEnhancedClient enhancedClient) {
+        return enhancedClient.table("mmt-stop-times", TableSchema.fromBean(StopTime.class));
+    }
+
+    @Bean
+    public DynamoDbTable<Trip> provideTripTable(DynamoDbEnhancedClient enhancedClient) {
+        return enhancedClient.table("mmt-trips", TableSchema.fromBean(Trip.class));
     }
 
     @Bean

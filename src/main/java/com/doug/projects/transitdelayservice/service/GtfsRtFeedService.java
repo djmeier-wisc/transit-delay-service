@@ -8,7 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 @Service
 @RequiredArgsConstructor
-public class RealtimeMetroService {
+public class GtfsRtFeedService {
     private final WebClient client;
     @Value("${metro.realtime}")
     private String realtimeUrl;

@@ -12,21 +12,20 @@ import org.springframework.stereotype.Service;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class DelayWriterCronService {
     private final RouteTimestampRepository routeTimestampRepository;
-    private final RealtimeMetroService realtimeMetroService;
-    private final RealtimeResponseAdaptor adaptor;
+    private final GtfsRtFeedService realtimeMetroService;
+    private final RealtimeResponseConverter adaptor;
     @Value("${doesCronRun}")
     private Boolean doesCronRun;
 
     private static List<RouteTimestamp> removeDuplicates(List<RouteTimestamp> routeTimestamps) {
         Set<String> seen = new HashSet<>();
-        return routeTimestamps.stream().filter(rt -> seen.add(rt.getRoute())).collect(Collectors.toList());
+        return routeTimestamps.stream().filter(rt -> seen.add(rt.getRoute())).toList();
     }
 
     private static boolean nullTransitFields(RealtimeTransitResponse transitResponse) {

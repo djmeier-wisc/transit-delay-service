@@ -15,14 +15,13 @@ import org.springframework.util.CollectionUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class GetDelayService {
+public class DelayGraphingService {
     private final RouteTimestampRepository repository;
     private final RouteMapperService routeMapperService;
     private final LineGraphUtil lineGraphUtil;
@@ -123,7 +122,7 @@ public class GetDelayService {
                         log.error("Failed to create for friendlyName: {}", routeFriendlyName, e);
                     }
                     return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
-        }).collect(Collectors.toList());
+                }).toList();
         lineGraphUtil.sortByGTFSSortOrder(lineGraphDataList);
         response.setDatasets(lineGraphDataList);
         return response;

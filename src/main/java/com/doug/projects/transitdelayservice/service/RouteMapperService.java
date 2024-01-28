@@ -16,6 +16,7 @@ public class RouteMapperService {
     private static final Map<Integer, String> routeIdToServiceNameMap = new HashMap<>();
     private static final Map<String, String> serviceNameToColorMap = new HashMap<>();
     private static final Map<String, Integer> serviceNameToSortOrderMap = new HashMap<>();
+    private static final Map<String, List<Integer>> routeNameToIdsMap = new HashMap<>();
 
     /**
      * This is a mess, but yml doesn't support maps by default. To be worked on to make this less static
@@ -30,12 +31,14 @@ public class RouteMapperService {
             MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper.readerWithSchemaFor(RoutesAttributes.class).with(schema).readValues(file);
             List<RoutesAttributes> routesAttributes = routesAttributesIterator.readAll();
             routeIdToServiceNameMap.putAll(routesAttributes.stream()
-                    .collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name,
-                            (first, second) -> second)));
+                    .collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name, (first, second) -> second))); //chose the latter to resolve duplicate key bugs
             serviceNameToColorMap.putAll(routesAttributes.stream()
                     .collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" +
                             ra.getRoute_color(), (first, second) -> second)));
             serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, RoutesAttributes::getRoute_sort_order, (first, second) -> second)));
+            routeNameToIdsMap.putAll(routesAttributes.stream()
+                    .collect(Collectors.groupingBy(RoutesAttributes::getRoute_short_name,
+                            Collectors.mapping(RoutesAttributes::getRoute_id, Collectors.toList()))));
         } catch (Exception e) {
             throw new RuntimeException("Failed to load values into map!", e);
         }
@@ -62,19 +65,8 @@ public class RouteMapperService {
     public Integer getSortOrderFor(String routeFriendlyName) {
         return serviceNameToSortOrderMap.getOrDefault(routeFriendlyName, -1);
     }
-    /**
-     * Refreshes the static maps
-     *
-     * @return true if successfully write maps, false otherwise
-     */
-    public boolean refreshMaps() {
-        routeIdToServiceNameMap.clear();
-        serviceNameToColorMap.clear();
-        try {
-            setRouteIdToServiceNameMap();
-            return true;
-        } catch (RuntimeException e) {
-            return false;
-        }
+
+    public List<Integer> getRouteIdFor(String routeFriendlyName) {
+        return routeNameToIdsMap.getOrDefault(routeFriendlyName, Collections.emptyList());
     }
 }

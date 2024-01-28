@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.gtfs.realtime.Entity;
 import com.doug.projects.transitdelayservice.entity.gtfs.realtime.RealtimeTransitResponse;
@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class RealtimeResponseAdaptor {
+public class RealtimeResponseConverter {
     private final RouteMapperService routeMapperService;
 
     /**
@@ -59,7 +59,7 @@ public class RealtimeResponseAdaptor {
      */
     List<RouteTimestamp> convertFrom(RealtimeTransitResponse transitResponse) {
         Long timestampFromMetro = transitResponse.getHeader().getTimestamp();
-        return transitResponse.getEntity().parallelStream().filter(RealtimeResponseAdaptor::validateRequiredFields)
+        return transitResponse.getEntity().parallelStream().filter(RealtimeResponseConverter::validateRequiredFields)
                 .collect(Collectors.groupingBy(e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update()
                         .getTrip().getRoute_id())))).entrySet().stream().map(entry -> {
                     var routeName = entry.getKey();
@@ -72,13 +72,13 @@ public class RealtimeResponseAdaptor {
                     rts.setAverageDelay(averageDelay);
                     rts.setTimestamp(timestampFromMetro);
                     rts.setBusStatesList(entityList.stream().map(e -> {
-                        BusStates busStates = new BusStates();
+                        BusState busStates = new BusState();
                         busStates.setTripId(Integer.valueOf(e.getTrip_update().getTrip().getTrip_id()));
                         busStates.setDelay((int) getDelays(e, false));
                         busStates.setClosestStopId(e.getTrip_update().getStop_time_update().get(0).getStop_id());
                         return busStates.toString();
-                    }).collect(Collectors.toList()));
+                    }).toList());
                     return rts;
-                }).collect(Collectors.toList());
+                }).toList();
     }
 }

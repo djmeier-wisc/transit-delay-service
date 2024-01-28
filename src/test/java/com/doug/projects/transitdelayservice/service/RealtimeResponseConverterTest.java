@@ -17,11 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
-public class RealtimeResponseAdaptorTest {
+public class RealtimeResponseConverterTest {
 
     private static final Random random = new Random(1234);
     @InjectMocks
-    private RealtimeResponseAdaptor realtimeResponseAdaptor;
+    private RealtimeResponseConverter realtimeResponseAdaptor;
     @Mock
     private RouteMapperService routeMapperService;
 
