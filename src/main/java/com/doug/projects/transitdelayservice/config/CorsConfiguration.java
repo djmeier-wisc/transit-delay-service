@@ -28,9 +28,10 @@ public class CorsConfiguration {
             ServerHttpRequest request = ctx.getRequest();
             ServerHttpResponse response = ctx.getResponse();
             HttpHeaders headers = response.getHeaders();
-            for (var origin : ALLOWED_ORIGIN) {
-                if (request.getURI().getHost().contains(origin)) {
-                    headers.add("Access-Control-Allow-Origin", origin);
+            for (var configuredOrigin : ALLOWED_ORIGIN) {
+                String requestOrigin = request.getHeaders().getOrigin();
+                if (requestOrigin != null && requestOrigin.contains(configuredOrigin)) {
+                    headers.add("Access-Control-Allow-Origin", requestOrigin);
                     headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
                     headers.add("Access-Control-Max-Age", MAX_AGE);
                     headers.add("Access-Control-Allow-Headers", ALLOWED_HEADERS);
