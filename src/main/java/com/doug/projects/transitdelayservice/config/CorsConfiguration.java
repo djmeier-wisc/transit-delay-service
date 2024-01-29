@@ -19,7 +19,7 @@ public class CorsConfiguration {
             "x-requested-with, authorization, Content-Type, Authorization, credential, X-XSRF-TOKEN";
     private static final String ALLOWED_METHODS = "GET, PUT, POST, DELETE, OPTIONS";
     private static final String ALLOWED_ORIGIN =
-            "https://my-precious-time.com, https://www.my-precious-time.com, https://api.my-precious-time.com, http://localhost:3000";
+            "https://my-precious-time.com, https://www.my-precious-time.com, https://api.my-precious-time.com, http://localhost";
     private static final String MAX_AGE = "3600";
 
     @Bean
