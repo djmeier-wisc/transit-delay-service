@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequiredArgsConstructor
@@ -25,13 +26,18 @@ public class StopController {
     }
 
     @GetMapping("/v1/searchStop/departures")
-    public ResponseEntity<List<String>> searchDepartures(@RequestParam String stopName) {
-        return ResponseEntity.ofNullable(stopTimeService.getScheduledDepartureTimesForStop(stopName));
+    public ResponseEntity<List<String>> searchDepartures(@RequestParam String stopName,
+                                                         @RequestParam String routeFriendlyName) {
+        return ResponseEntity.ofNullable(stopTimeService.getScheduledDepartureTimesForStop(stopName,
+                routeFriendlyName));
     }
 
     @GetMapping("/v1/searchStop/stopDelay")
-    public ResponseEntity<Double> getDelayAtStop(@RequestParam String stopName, @RequestParam String route,
-                                                 @RequestParam String time) {
-        return ResponseEntity.ok(tripDelayService.getAverageDelayForStop(stopName, route, time, 30));
+    public ResponseEntity<Double> getDelayAtStop(@RequestParam String stopName, @RequestParam String route, @RequestParam String time, @RequestParam(defaultValue = "30") Integer searchPeriod) {
+        Optional<Double> delay = tripDelayService.getAverageDelayForStop(stopName, route, time, 30);
+        if (delay.isEmpty())
+            return ResponseEntity.notFound().build();
+        else
+            return ResponseEntity.ok(delay.get());
     }
 }

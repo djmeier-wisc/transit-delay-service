@@ -75,7 +75,8 @@ public class RealtimeResponseConverter {
                         BusState busStates = new BusState();
                         busStates.setTripId(Integer.valueOf(e.getTrip_update().getTrip().getTrip_id()));
                         busStates.setDelay((int) getDelays(e, false));
-                        busStates.setClosestStopId(e.getTrip_update().getStop_time_update().get(0).getStop_id());
+                        busStates.setClosestStopId(Integer.valueOf(e.getTrip_update().getStop_time_update().get(0)
+                                .getStop_id()));
                         return busStates.toString();
                     }).toList());
                     return rts;
