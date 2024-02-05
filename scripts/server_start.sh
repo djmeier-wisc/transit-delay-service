@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 cd /home/ec2-user/server
-sudo java -jar target/*.jar > /home/ec2-user/logs/logs.txt 2> /home/ec2-user/logs/logs.txt < /home/ec2-user/logs/logs.txt &
+sudo yum install java-17-amazon-corretto
+sudo java -jar target/*.jar > logs.txt 2> logs.txt < logs.txt &

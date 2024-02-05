@@ -2,6 +2,7 @@ package com.doug.projects.transitdelayservice;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
+import io.swagger.v3.oas.annotations.servers.Server;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -16,7 +17,12 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 @SpringBootApplication
 @EnableScheduling
 @EnableWebFlux
-@OpenAPIDefinition
+@OpenAPIDefinition(
+        servers = {
+                @Server(url = "/", description = "Default Server URL"),
+                @Server(url = "https://api.my-precious-time.com", description = "Production")
+        }
+)
 public class TransitDelayServiceApplication {
 
     public static void main(String[] args) {
@@ -40,8 +46,7 @@ public class TransitDelayServiceApplication {
                         ExchangeStrategies.builder()
                                 .codecs(clientCodecConfigurer -> clientCodecConfigurer
                                         .defaultCodecs().maxInMemorySize((1000 * 1000 * 1024))).build())
-                .codecs(clientCodecConfigurer -> {
-                    clientCodecConfigurer.defaultCodecs().maxInMemorySize(1000 * 1000 * 1024);
-        }).build();
+                .codecs(clientCodecConfigurer -> clientCodecConfigurer.defaultCodecs()
+                        .maxInMemorySize(1000 * 1000 * 1024)).build();
     }
 }
