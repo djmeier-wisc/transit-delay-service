@@ -1,16 +1,21 @@
 package com.doug.projects.transitdelayservice.entity.dynamodb;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
 
 @Data
 @Builder
 @DynamoDbBean
+@NoArgsConstructor
+@AllArgsConstructor
 public class Trip {
     private Integer route_id;
-    private Integer route_short_name;
+    private String route_short_name;
     private String service_id;
     private Integer trip_id;
     private String trip_headsign;
@@ -26,12 +31,13 @@ public class Trip {
     private Integer wheelchair_accessible;
     private Integer bikes_allowed;
 
-    @DynamoDbSortKey
+    @DynamoDbPartitionKey
     public Integer getTrip_id() {
         return trip_id;
     }
 
-    // Constructors, toString(), hashCode(), equals(), etc., can be added as needed
+    @DynamoDbSecondaryPartitionKey(indexNames = "route_id-index")
+    public Integer getRoute_id() {
+        return route_id;
+    }
 }
-
-

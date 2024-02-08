@@ -43,11 +43,11 @@ class RouteTimestampUtilTest {
 
     @Test
     void testExtractBusStates() {
-        String stringToParse = "10#stopId#123";
+        String stringToParse = "10#1#123";
 
         BusState result = RouteTimestampUtil.extractBusStates(stringToParse);
         assertEquals(10, result.getDelay().intValue());
-        assertEquals("stopId", result.getClosestStopId());
+        assertEquals(1, result.getClosestStopId());
         assertEquals(123, result.getTripId());
     }
 
@@ -65,7 +65,7 @@ class RouteTimestampUtilTest {
         RouteTimestamp routeTimestamp = new RouteTimestamp();
         routeTimestamp.setTimestamp(1000L * timestamp); // Use some timestamp value based on the timestamp
         routeTimestamp.setAverageDelay(averageDelay);
-        routeTimestamp.setBusStatesList(Arrays.asList("60#stopId#123", "120#stopId#456"));
+        routeTimestamp.setBusStatesList(Arrays.asList("60#1#123", "120#1#456"));
         return routeTimestamp;
     }
 }

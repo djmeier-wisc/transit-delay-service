@@ -32,7 +32,7 @@ public class DelayByRouteController {
     }
 
     @GetMapping("/v1/percent/allLines")
-    public ResponseEntity<LineGraphDataResponse> getPercentDelayByAllLines(@RequestParam(required = false) Integer units, @RequestParam(required = false) Long startTime, @RequestParam(required = false) Long endTime, @RequestParam(required = false, defaultValue = "5") Integer onTimeDifferenceDefinition, @RequestParam(required = false) List<String> routes) {
+    public ResponseEntity<LineGraphDataResponse> getPercentDelayByAllLines(@RequestParam(required = false) Integer units, @RequestParam(required = false) Long startTime, @RequestParam(required = false) Long endTime, @RequestParam(defaultValue = "5") Integer onTimeDifferenceDefinition, @RequestParam(required = false) List<String> routes) {
         return ResponseEntity.ok(delayGraphingService.genericLineGraphConverter(startTime, endTime, units, routes,
                 ((routeTimestampList) -> RouteTimestampUtil.percentOnTime(routeTimestampList,
                         onTimeDifferenceDefinition))));

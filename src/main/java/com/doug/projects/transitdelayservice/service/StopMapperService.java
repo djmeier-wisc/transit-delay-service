@@ -55,6 +55,11 @@ public class StopMapperService {
         return stopMap.getOrDefault(stopName, Collections.emptyList()).stream();
     }
 
+    /**
+     * @param stopName the stopName to fuzzy search for
+     * @param limit
+     * @return
+     */
     public Stream<String> searchStops(String stopName, int limit) {
         if (limit <= 0)
             limit = 10;

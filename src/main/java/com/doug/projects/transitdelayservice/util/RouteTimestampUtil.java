@@ -2,12 +2,14 @@ package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.TimeBusState;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.stream.Stream;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.floor;
@@ -66,7 +68,7 @@ public class RouteTimestampUtil {
         BusState busStates = new BusState();
         String[] vals = stringToParse.split("#");
         Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
-        String closestStopId = vals.length < 2 ? null : vals[1];
+        Integer closestStopId = vals.length < 2 ? null : Integer.valueOf(vals[1]);
         Integer tripId = vals.length < 3 ? null : Integer.valueOf(vals[2]);
         busStates.setDelay(delay);
         busStates.setClosestStopId(closestStopId);
@@ -83,5 +85,20 @@ public class RouteTimestampUtil {
         }
         Double timeInMinutes = averageDelay.getAsDouble() / 60; //convert to minutes
         return floor(timeInMinutes * 1000) / 1000;
+    }
+
+    public static Stream<TimeBusState> getTimeBusState(RouteTimestamp routeTimestamp) {
+        return routeTimestamp.getBusStatesList().stream().map(stringToParse -> {
+            TimeBusState timeBusState = new TimeBusState();
+            String[] vals = stringToParse.split("#");
+            Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
+            Integer closestStopId = vals.length < 2 ? null : Integer.valueOf(vals[1]);
+            Integer tripId = vals.length < 3 ? null : Integer.valueOf(vals[2]);
+            timeBusState.setTimestamp(routeTimestamp.getTimestamp());
+            timeBusState.setDelay(delay);
+            timeBusState.setClosestStopId(closestStopId);
+            timeBusState.setTripId(tripId);
+            return timeBusState;
+        });
     }
 }

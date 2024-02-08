@@ -20,7 +20,7 @@ public class StopController {
     private final TripDelayService tripDelayService;
 
     @GetMapping("/v1/searchStop/name")
-    public ResponseEntity<List<String>> searchStop(@RequestParam String stopName, @RequestParam String route,
+    public ResponseEntity<List<String>> searchStop(@RequestParam String stopName,
                                                    @RequestParam(defaultValue = "10") Integer limit) {
         return ResponseEntity.ofNullable(mapperService.searchStops(stopName, limit).toList());
     }

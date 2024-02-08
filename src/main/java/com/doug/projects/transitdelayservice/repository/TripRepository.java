@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
+import software.amazon.awssdk.enhanced.dynamodb.model.QueryEnhancedRequest;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,8 +31,10 @@ public class TripRepository {
     }
 
     public List<Integer> getTripIdsFor(List<Integer> routeIds) {
-        return routeIds.parallelStream().flatMap(routeId -> table.index("route-short-name-index")
-                .query(QueryConditional.keyEqualTo(Key.builder().partitionValue(routeId).build())).stream()
-                .flatMap(tripPage -> tripPage.items().stream().map(Trip::getTrip_id))).collect(Collectors.toList());
+        var index = table.index("route_id-index");
+        return routeIds.parallelStream()
+                .flatMap(routeId -> index.query(QueryEnhancedRequest.builder().addAttributeToProject("trip_id")
+                                .queryConditional(QueryConditional.keyEqualTo(b -> b.partitionValue(routeId))).build()).stream()
+                        .flatMap(s -> s.items().stream()).map(Trip::getTrip_id)).collect(Collectors.toList());
     }
 }

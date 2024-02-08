@@ -13,6 +13,6 @@ public class StopTimeUpdate {
     private Integer stop_sequence;
     private Arrival arrival;
     private Departure departure;
-    private String stop_id;
+    private Integer stop_id;
     private Integer schedule_relationship;
 }

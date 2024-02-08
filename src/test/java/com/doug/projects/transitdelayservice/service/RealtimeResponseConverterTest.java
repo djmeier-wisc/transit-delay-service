@@ -26,7 +26,7 @@ public class RealtimeResponseConverterTest {
     private RouteMapperService routeMapperService;
 
     private static List<StopTimeUpdate> generateStopTimeUpdate(int number) {
-        String stopId = "stop" + random.nextInt(10);
+        Integer stopId = random.nextInt(10);
         List<StopTimeUpdate> stopTimeUpdates = new ArrayList<>();
         for (int i = 0; i < number; i++) {
             stopTimeUpdates.add(StopTimeUpdate.builder().stop_id(stopId).departure(Departure.builder().delay(random.nextInt(100)).build()).arrival(Arrival.builder().delay(10).build()).build());
@@ -60,8 +60,7 @@ public class RealtimeResponseConverterTest {
 
         assertNotNull(routeTimestamps);
         assertEquals(List.of(RouteTimestamp.builder().route("routeId").timestamp(123L)
-                .busStatesList(List.of("40" + "#stop3" +
-                "#28", "64#stop0#97")).averageDelay(52.5).build()), routeTimestamps);
+                .busStatesList(List.of("40" + "#3" + "#28", "64#0#97")).averageDelay(52.5).build()), routeTimestamps);
     }
 
     @Test

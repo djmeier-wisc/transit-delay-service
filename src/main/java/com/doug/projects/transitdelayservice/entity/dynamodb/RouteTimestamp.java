@@ -17,19 +17,19 @@ public class RouteTimestamp {
      * The route
      */
     @Getter(AccessLevel.NONE)
-    public String route;
+    private String route;
     /**
      * The timestamp, gathered from GTFS realtime feed. DO NOT USE SYSTEM TIMESTAMP to avoid duplication
      */
-    public Long timestamp;
+    private Long timestamp;
     /**
      * The list of routes, in the format of <code>BusState</code> toString method. delay%closestStopId%tripId
      */
-    public List<String> busStatesList;
+    private List<String> busStatesList;
     /**
      * The average difference from schedule of this route, across all active buses.
      */
-    public Double averageDelay;
+    private Double averageDelay;
 
     @DynamoDbPartitionKey
     public String getRoute() {
