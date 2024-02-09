@@ -9,13 +9,17 @@ public class TransitDateUtil {
     public static long getMidnightSixDaysAgo() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
-        return LocalDateTime.of(ldt.minusDays(6).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+        return LocalDateTime.of(ldt.minusDays(6)
+                        .toLocalDate(), midnight)
+                .toEpochSecond(ZoneOffset.of("-5"));
     }
 
     public static long getMidnightTonight() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
-        return LocalDateTime.of(ldt.plusDays(1).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+        return LocalDateTime.of(ldt.plusDays(1)
+                        .toLocalDate(), midnight)
+                .toEpochSecond(ZoneOffset.of("-5"));
     }
 
     public static long daysToSeconds(long days) {

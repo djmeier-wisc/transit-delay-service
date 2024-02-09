@@ -33,8 +33,11 @@ public class StopController {
     }
 
     @GetMapping("/v1/searchStop/stopDelay")
-    public ResponseEntity<Double> getDelayAtStop(@RequestParam String stopName, @RequestParam String route, @RequestParam String time, @RequestParam(defaultValue = "30") Integer searchPeriod) {
-        Optional<Double> delay = tripDelayService.getAverageDelayForStop(stopName, route, time, 30);
+    public ResponseEntity<Double> getDelayAtStop(@RequestParam String stopName,
+                                                 @RequestParam String routeFriendlyName, @RequestParam String time,
+                                                 @RequestParam(defaultValue = "30") Integer searchPeriod) {
+        Optional<Double> delay =
+                tripDelayService.getAverageDelayForStop(stopName, routeFriendlyName, time, searchPeriod);
         if (delay.isEmpty())
             return ResponseEntity.notFound().build();
         else

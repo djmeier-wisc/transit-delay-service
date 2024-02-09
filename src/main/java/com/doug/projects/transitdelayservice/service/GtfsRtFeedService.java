@@ -12,7 +12,13 @@ public class GtfsRtFeedService {
     private final WebClient client;
     @Value("${metro.realtime}")
     private String realtimeUrl;
+
     public RealtimeTransitResponse getCurrentRunData() {
-        return client.get().uri(realtimeUrl).retrieve().bodyToMono(RealtimeTransitResponse.class).retry(3).block();
+        return client.get()
+                .uri(realtimeUrl)
+                .retrieve()
+                .bodyToMono(RealtimeTransitResponse.class)
+                .retry(3)
+                .block();
     }
 }

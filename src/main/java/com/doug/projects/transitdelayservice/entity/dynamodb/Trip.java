@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
 @Data
 @Builder
@@ -37,6 +38,7 @@ public class Trip {
     }
 
     @DynamoDbSecondaryPartitionKey(indexNames = "route_id-index")
+    @DynamoDbSortKey
     public Integer getRoute_id() {
         return route_id;
     }

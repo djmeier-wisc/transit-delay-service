@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
 @DynamoDbBean
 @Data
@@ -27,5 +28,10 @@ public class StopTime {
     @DynamoDbPartitionKey
     public Integer getTrip_id() {
         return trip_id;
+    }
+
+    @DynamoDbSortKey
+    public Integer getStop_id() {
+        return stop_id;
     }
 }

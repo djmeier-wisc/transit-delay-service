@@ -25,11 +25,14 @@ public class DelayWriterCronService {
 
     private static List<RouteTimestamp> removeDuplicates(List<RouteTimestamp> routeTimestamps) {
         Set<String> seen = new HashSet<>();
-        return routeTimestamps.stream().filter(rt -> seen.add(rt.getRoute())).toList();
+        return routeTimestamps.stream()
+                .filter(rt -> seen.add(rt.getRoute()))
+                .toList();
     }
 
     private static boolean nullTransitFields(RealtimeTransitResponse transitResponse) {
-        return transitResponse == null || transitResponse.getHeader() == null || transitResponse.getHeader().getTimestamp() == null || transitResponse.getEntity() == null;
+        return transitResponse == null || transitResponse.getHeader() == null || transitResponse.getHeader()
+                .getTimestamp() == null || transitResponse.getEntity() == null;
     }
 
     @Scheduled(fixedRate = 300000)

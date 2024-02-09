@@ -30,7 +30,9 @@ public class TripDelayService {
     private final StopMapperService stopMapperService;
 
     private static Stream<BusState> getBusStatesAsStream(RouteTimestamp rt) {
-        return rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates);
+        return rt.getBusStatesList()
+                .stream()
+                .map(RouteTimestampUtil::extractBusStates);
     }
 
     /**
@@ -41,22 +43,23 @@ public class TripDelayService {
      * @return
      */
     public Optional<Double> getAverageDelayForStop(String stopName, String route, String time, Integer searchPeriod) {
-        List<Integer> routeIds = routeMapperService.getRouteIdFor(route);
         List<StopTime> stopTimes = stopTimeService.getStopTimesForStop(stopName, route, time);
         if (stopTimes.size() != 1) {
             log.info("Gathered more than one trip ({}) with these criteria: {},{},{},{}", stopTimes, stopName, route,
                     time, searchPeriod);
             return Optional.empty();
         }
-        return getAverageDelayForStop(stopTimes.get(0).getTrip_id(), stopTimes.get(0).getStop_id(), searchPeriod);
+        return getAverageDelayForStop(stopTimes.get(0)
+                .getTrip_id(), stopTimes.get(0)
+                .getStop_id(), searchPeriod);
     }
 
     /**
      * Gets the average delay of a bus stop for a particular trip. Data is sampled from previous searchPeriod days.
      * Useful if you wanted to predict what time someone should show up to a particular stop to board a particular trip
      *
-     * @param stopId the stopId used to calculate delay, for a particular tripId
-     * @param tripId the trip to calculate the average delay for, when it is near stopId
+     * @param stopId       the stopId used to calculate delay, for a particular tripId
+     * @param tripId       the trip to calculate the average delay for, when it is near stopId
      * @param searchPeriod the number of days to search back when getting delay
      * @return -1
      * @apiNote See overloaded class for a more user-friendly way to gather this data involving stopName
@@ -73,10 +76,13 @@ public class TripDelayService {
         List<Integer> nearStopSet = stopTimeService.getTenNearestStopsFor(tripId, stopId, 10);
         List<Integer> routeTimestampList =
                 routeTimestampRepository.getRouteTimestampsBy(startTime, getMidnightTonight(), routeFriendlyName)
-                        .stream().flatMap(RouteTimestampUtil::getTimeBusState)
+                        .stream()
+                        .flatMap(RouteTimestampUtil::getTimeBusState)
                         .filter(busStates -> Objects.equals(busStates.getTripId(), tripId) &&
                                 nearStopSet.contains(busStates.getClosestStopId())) //only this trip & near stop
-                        .map(TimeBusState::getDelay).sorted().toList();
+                        .map(TimeBusState::getDelay)
+                        .sorted()
+                        .toList();
         return Optional.of(routeTimestampList.get(routeTimestampList.size() / 2) / 60.0);
     }
 

@@ -92,8 +92,9 @@ public class DelayGraphingService {
 
         response.setLabels(getColumnLabels(finalStartTime, finalEndTime, finalUnits));
         var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes);
-        List<LineGraphData> lineGraphDataList =
-                routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
+        List<LineGraphData> lineGraphDataList = routeTimestampsMap.entrySet()
+                .parallelStream()
+                .map(routeFriendlyName -> {
                     List<RouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
                     if (timestampsForRoute == null) {
                         timestampsForRoute = Collections.emptyList();
@@ -107,7 +108,8 @@ public class DelayGraphingService {
                                     (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
                             int currLastIndex = timestampsForRoute.size();
                             for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                                if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                                if (timestampsForRoute.get(i)
+                                        .getTimestamp() >= finalCurrEndTime) {
                                     currLastIndex = i;
                                     break;
                                 }
@@ -118,11 +120,12 @@ public class DelayGraphingService {
                             //get ready for next iteration
                             lastIndexUsed = currLastIndex;
                         }
-            } catch (Exception e) {
+                    } catch (Exception e) {
                         log.error("Failed to create for friendlyName: {}", routeFriendlyName, e);
                     }
                     return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
-                }).toList();
+                })
+                .toList();
         lineGraphUtil.sortByGTFSSortOrder(lineGraphDataList);
         response.setDatasets(lineGraphDataList);
         return response;

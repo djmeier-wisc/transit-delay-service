@@ -16,8 +16,8 @@ import java.util.stream.Stream;
 
 @Service
 public class StopMapperService {
-    private static Stop[] stopList = new Stop[0];
     private static final Map<String, List<Stop>> stopMap = new HashMap<>(3000);
+    private static Stop[] stopList = new Stop[0];
     private static List<String> stopNames = new ArrayList<>(3000);
 
     @PostConstruct
@@ -26,14 +26,21 @@ public class StopMapperService {
             File file = new File("files/stops.csv");
             CsvMapper csvMapper = new CsvMapper();
 
-            CsvSchema schema = CsvSchema.emptySchema().withHeader();
+            CsvSchema schema = CsvSchema.emptySchema()
+                    .withHeader();
 
             //note, I am using arrays here. While 3k isn't that much, other systems may have more in the future
-            MappingIterator<Stop> routesAttributesIterator =
-                    csvMapper.readerWithSchemaFor(Stop.class).with(schema).readValues(file);
-            stopList = routesAttributesIterator.readAll().toArray(stopList);
-            stopMap.putAll(Stream.of(stopList).collect(Collectors.groupingBy(Stop::getStop_name)));
-            stopNames = Arrays.stream(stopList).map(Stop::getStop_name).distinct().toList();
+            MappingIterator<Stop> routesAttributesIterator = csvMapper.readerWithSchemaFor(Stop.class)
+                    .with(schema)
+                    .readValues(file);
+            stopList = routesAttributesIterator.readAll()
+                    .toArray(stopList);
+            stopMap.putAll(Stream.of(stopList)
+                    .collect(Collectors.groupingBy(Stop::getStop_name)));
+            stopNames = Arrays.stream(stopList)
+                    .map(Stop::getStop_name)
+                    .distinct()
+                    .toList();
         } catch (Exception e) {
             throw new RuntimeException("Failed to load values into map!", e);
         }
@@ -42,7 +49,9 @@ public class StopMapperService {
     public List<Stop> searchForStop(String search, int limit) {
         if (limit <= 0)
             limit = 10;
-        return searchStops(search, limit).flatMap(this::getStopsByName).limit(limit).collect(Collectors.toList());
+        return searchStops(search, limit).flatMap(this::getStopsByName)
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -52,7 +61,8 @@ public class StopMapperService {
      * @return
      */
     public Stream<Stop> getStopsByName(String stopName) {
-        return stopMap.getOrDefault(stopName, Collections.emptyList()).stream();
+        return stopMap.getOrDefault(stopName, Collections.emptyList())
+                .stream();
     }
 
     /**
@@ -67,7 +77,8 @@ public class StopMapperService {
     }
 
     public Stream<String> searchStops(String stopName) {
-        return FuzzySearch.extractSorted(stopName, StopMapperService.stopNames).stream()
+        return FuzzySearch.extractSorted(stopName, StopMapperService.stopNames)
+                .stream()
                 .map(ExtractedResult::getString);
     }
 }

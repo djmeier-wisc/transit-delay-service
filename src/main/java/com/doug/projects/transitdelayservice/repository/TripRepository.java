@@ -19,11 +19,15 @@ public class TripRepository {
     private final DynamoDbTable<Trip> table;
 
     public List<Integer> getRouteIdsFor(List<Integer> tripIds) {
-        return tripIds.parallelStream().flatMap(id -> Stream.ofNullable(getRouteIdFor(id).orElse(null))).toList();
+        return tripIds.parallelStream()
+                .flatMap(id -> Stream.ofNullable(getRouteIdFor(id).orElse(null)))
+                .toList();
     }
 
     public Optional<Integer> getRouteIdFor(Integer tripId) {
-        Trip trip = table.getItem(Key.builder().partitionValue(tripId).build());
+        Trip trip = table.getItem(Key.builder()
+                .partitionValue(tripId)
+                .build());
         if (trip == null) {
             return Optional.empty();
         }
@@ -31,10 +35,17 @@ public class TripRepository {
     }
 
     public List<Integer> getTripIdsFor(List<Integer> routeIds) {
-        var index = table.index("route_id-index");
+        var index = table.index("route_id-index"); //TODO: THis is broken. Add sort key to this index!
         return routeIds.parallelStream()
-                .flatMap(routeId -> index.query(QueryEnhancedRequest.builder().addAttributeToProject("trip_id")
-                                .queryConditional(QueryConditional.keyEqualTo(b -> b.partitionValue(routeId))).build()).stream()
-                        .flatMap(s -> s.items().stream()).map(Trip::getTrip_id)).collect(Collectors.toList());
+                .flatMap(routeId -> index.query(QueryEnhancedRequest.builder()
+                                .addAttributeToProject("trip_id")
+                                .addAttributeToProject("route_id")
+                                .queryConditional(QueryConditional.keyEqualTo(b -> b.partitionValue(routeId)))
+                                .build())
+                        .stream()
+                        .flatMap(s -> s.items()
+                                .stream())
+                        .map(Trip::getTrip_id))
+                .collect(Collectors.toList());
     }
 }

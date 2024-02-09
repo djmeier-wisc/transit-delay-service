@@ -17,8 +17,9 @@ import static java.lang.Math.floor;
 public class RouteTimestampUtil {
     public static Double getMaxDelayForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {
 
-        OptionalInt averageDelay =
-                timestampsForRoute.stream().mapToInt(RouteTimestampUtil::getMaxDelayFromBusStatesList).max();
+        OptionalInt averageDelay = timestampsForRoute.stream()
+                .mapToInt(RouteTimestampUtil::getMaxDelayFromBusStatesList)
+                .max();
         if (averageDelay.isEmpty()) {
             return null;
         }
@@ -29,12 +30,15 @@ public class RouteTimestampUtil {
     public static Double percentOnTime(List<RouteTimestamp> timestampsForRoute, Integer criteria) {
 
         List<Integer> allBusStates = timestampsForRoute.stream()
-                .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
-                .map(BusState::getDelay).toList();
+                .flatMap(rt -> rt.getBusStatesList()
+                        .stream()
+                        .map(RouteTimestampUtil::extractBusStates))
+                .map(BusState::getDelay)
+                .toList();
 
-        Double percentOnTime =
-                ((double) allBusStates.stream().filter(delay -> Math.abs(delay) / 60 <= criteria).count() /
-                        allBusStates.size()) * 100;
+        Double percentOnTime = ((double) allBusStates.stream()
+                .filter(delay -> Math.abs(delay) / 60 <= criteria)
+                .count() / allBusStates.size()) * 100;
         if (allBusStates.isEmpty()) {
             return null;
         }
@@ -43,19 +47,24 @@ public class RouteTimestampUtil {
     }
 
     public static Integer getMaxDelayFromBusStatesList(RouteTimestamp rt) {
-        return rt.getBusStatesList().stream().map(bs -> {
-            String[] vals = StringUtils.split(bs, "#");
-            //see BusStatesList.java for code on how these are serialized. There was probably a
-            // better solution, but I didn't figure it out.
-            if (vals.length < 1) {
-                return null;
-            }
-            try {
-                return abs(Integer.parseInt(vals[0]));
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }).filter(Objects::nonNull).max(Integer::compareTo).orElse(-1);
+        return rt.getBusStatesList()
+                .stream()
+                .map(bs -> {
+                    String[] vals = StringUtils.split(bs, "#");
+                    //see BusStatesList.java for code on how these are serialized. There was probably a
+                    // better solution, but I didn't figure it out.
+                    if (vals.length < 1) {
+                        return null;
+                    }
+                    try {
+                        return abs(Integer.parseInt(vals[0]));
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .max(Integer::compareTo)
+                .orElse(-1);
     }
 
     /**
@@ -78,8 +87,9 @@ public class RouteTimestampUtil {
 
     public static Double getAverageDelayDataForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {
 
-        OptionalDouble averageDelay =
-                timestampsForRoute.stream().mapToDouble(RouteTimestamp::getAverageDelay).average();
+        OptionalDouble averageDelay = timestampsForRoute.stream()
+                .mapToDouble(RouteTimestamp::getAverageDelay)
+                .average();
         if (averageDelay.isEmpty()) {
             return null;
         }
@@ -88,17 +98,19 @@ public class RouteTimestampUtil {
     }
 
     public static Stream<TimeBusState> getTimeBusState(RouteTimestamp routeTimestamp) {
-        return routeTimestamp.getBusStatesList().stream().map(stringToParse -> {
-            TimeBusState timeBusState = new TimeBusState();
-            String[] vals = stringToParse.split("#");
-            Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
-            Integer closestStopId = vals.length < 2 ? null : Integer.valueOf(vals[1]);
-            Integer tripId = vals.length < 3 ? null : Integer.valueOf(vals[2]);
-            timeBusState.setTimestamp(routeTimestamp.getTimestamp());
-            timeBusState.setDelay(delay);
-            timeBusState.setClosestStopId(closestStopId);
-            timeBusState.setTripId(tripId);
-            return timeBusState;
-        });
+        return routeTimestamp.getBusStatesList()
+                .stream()
+                .map(stringToParse -> {
+                    TimeBusState timeBusState = new TimeBusState();
+                    String[] vals = stringToParse.split("#");
+                    Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
+                    Integer closestStopId = vals.length < 2 ? null : Integer.valueOf(vals[1]);
+                    Integer tripId = vals.length < 3 ? null : Integer.valueOf(vals[2]);
+                    timeBusState.setTimestamp(routeTimestamp.getTimestamp());
+                    timeBusState.setDelay(delay);
+                    timeBusState.setClosestStopId(closestStopId);
+                    timeBusState.setTripId(tripId);
+                    return timeBusState;
+                });
     }
 }

@@ -27,15 +27,22 @@ public class RouteMapperService {
             File file = new File("files/routes.csv");
             CsvMapper csvMapper = new CsvMapper();
 
-            CsvSchema schema = CsvSchema.emptySchema().withHeader();
-            MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper.readerWithSchemaFor(RoutesAttributes.class).with(schema).readValues(file);
+            CsvSchema schema = CsvSchema.emptySchema()
+                    .withHeader();
+            MappingIterator<RoutesAttributes> routesAttributesIterator =
+                    csvMapper.readerWithSchemaFor(RoutesAttributes.class)
+                            .with(schema)
+                            .readValues(file);
             List<RoutesAttributes> routesAttributes = routesAttributesIterator.readAll();
             routeIdToServiceNameMap.putAll(routesAttributes.stream()
-                    .collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name, (first, second) -> second))); //chose the latter to resolve duplicate key bugs
+                    .collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name,
+                            (first, second) -> second))); //chose the latter to resolve duplicate key bugs
             serviceNameToColorMap.putAll(routesAttributes.stream()
                     .collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" +
                             ra.getRoute_color(), (first, second) -> second)));
-            serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, RoutesAttributes::getRoute_sort_order, (first, second) -> second)));
+            serviceNameToSortOrderMap.putAll(routesAttributes.stream()
+                    .collect(Collectors.toMap(RoutesAttributes::getRoute_short_name,
+                            RoutesAttributes::getRoute_sort_order, (first, second) -> second)));
             routeNameToIdsMap.putAll(routesAttributes.stream()
                     .collect(Collectors.groupingBy(RoutesAttributes::getRoute_short_name,
                             Collectors.mapping(RoutesAttributes::getRoute_id, Collectors.toList()))));
