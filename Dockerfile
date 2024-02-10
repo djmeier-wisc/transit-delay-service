@@ -14,7 +14,7 @@ COPY . .
 RUN mvn package -DskipTests
 
 # Stage 2: Create the final lightweight image
-FROM amazoncorretto:17
+FROM ghcr.io/graalvm/jdk:java17
 
 WORKDIR /app
 
