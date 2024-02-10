@@ -19,8 +19,7 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 @EnableWebFlux
 @OpenAPIDefinition(
         servers = {
-                @Server(url = "/", description = "Default Server URL"),
-                @Server(url = "https://api.my-precious-time.com", description = "Production")
+                @Server(url = "https://api.my-precious-time.com", description = "Production API")
         }
 )
 public class TransitDelayServiceApplication {

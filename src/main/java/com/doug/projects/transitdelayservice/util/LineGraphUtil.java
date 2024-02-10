@@ -36,12 +36,14 @@ public class LineGraphUtil {
         return columnLabels;
     }
 
-    public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData) {
+    public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData, boolean setColor) {
         LineGraphData lineGraphData = new LineGraphData();
         lineGraphData.setLineLabel(routeFriendlyName);
         lineGraphData.setTension(0.0);
         lineGraphData.setData(currData);
-        lineGraphData.setBorderColor(routesService.getColorFor(routeFriendlyName));
+        if (setColor) {
+            lineGraphData.setBorderColor(routesService.getColorFor(routeFriendlyName));
+        }
         return lineGraphData;
     }
 
