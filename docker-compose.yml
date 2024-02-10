@@ -19,7 +19,7 @@ services:
       - /var/run:/var/run
       # Mount the shared configuration directory, used by the AWS CLI and AWS SDKs
       # On Windows, this directory can be found at "%UserProfile%\.aws"
-      - $HOME/.aws/:/home/.aws/
+      - C:/Users/dougm/.aws:/home/.aws/
     environment:
       # define the home folder; credentials will be read from $HOME/.aws
       HOME: "/home"
@@ -34,11 +34,21 @@ services:
   # You can test multiple containers at a time, simply duplicate this section
   # and customize it for each container, and give it a unique IP in 'credentials_network'.
   transit-delay-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./files:/app/files
+    environment:
+      AWS_REGION: "us-east-1"
+      AWS_DEFAULT_REGION: "us-east-1"
+      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/creds"
+      AWS_CONTAINER_CREDENTIALS_FULL_URI: "http://ecs-local-endpoints:51678/creds"
     depends_on:
       - ecs-local-endpoints
     networks:
       credentials_network:
         ipv4_address: "169.254.170.3"
-    environment:
-      AWS_DEFAULT_REGION: "us-east-1"
-      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/creds"
+    mem_limit: 512mb
