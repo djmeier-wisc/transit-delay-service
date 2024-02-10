@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 class LineGraphUtilTest {
@@ -41,22 +42,37 @@ class LineGraphUtilTest {
     }
 
     @Test
-    void testGetLineGraphData() {
+    void testGetLineGraphDataColorTrue() {
         String routeFriendlyName = "TestRoute";
         List<Double> currData = Arrays.asList(1.0, 2.0, 3.0);
 
         // Mocking the behavior of the routesService
         when(routesService.getColorFor(routeFriendlyName)).thenReturn("#FFFFFF");
 
-        LineGraphData result = lineGraphUtil.getLineGraphData(routeFriendlyName, currData);
+        LineGraphData result = lineGraphUtil.getLineGraphData(routeFriendlyName, currData, true);
 
-        // You can add assertions based on your expected results
-        // For simplicity, let's just check the route label and border color
         assertEquals(routeFriendlyName, result.getLineLabel());
         assertEquals("#FFFFFF", result.getBorderColor());
 
         // Verify that getColorFor was called with the correct argument
         verify(routesService, times(1)).getColorFor(routeFriendlyName);
+    }
+
+    @Test
+    void testGetLineGraphDataColorFalse() {
+        String routeFriendlyName = "TestRoute";
+        List<Double> currData = Arrays.asList(1.0, 2.0, 3.0);
+
+        // Mocking the behavior of the routesService
+        when(routesService.getColorFor(routeFriendlyName)).thenReturn("#FFFFFF");
+
+        LineGraphData result = lineGraphUtil.getLineGraphData(routeFriendlyName, currData, false);
+
+        assertEquals(routeFriendlyName, result.getLineLabel());
+        assertNull(result.getBorderColor()); //should not be passed when false
+
+        // Verify that getColorFor was called with the correct argument
+        verify(routesService, times(0)).getColorFor(routeFriendlyName);
     }
 
     @Test

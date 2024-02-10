@@ -25,9 +25,8 @@ class RouteTimestampUtilTest {
     void testPercentOnTime() {
         List<RouteTimestamp> timestampsForRoute =
                 Arrays.asList(createRouteTimestamp(1, 60), createRouteTimestamp(2, 120), createRouteTimestamp(3, 180));
-        Integer criteria = 1;
 
-        Double result = RouteTimestampUtil.percentOnTime(timestampsForRoute, criteria);
+        Double result = RouteTimestampUtil.percentOnTime(timestampsForRoute, 1, 1);
 
         assertEquals(50.0, result);
     }

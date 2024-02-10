@@ -24,14 +24,14 @@ public class RouteTimestampUtil {
         return floor(timeInMinutes * 1000) / 1000;
     }
 
-    public static Double percentOnTime(List<RouteTimestamp> timestampsForRoute, Integer criteria) {
+    public static Double percentOnTime(List<RouteTimestamp> timestampsForRoute, Integer lower, Integer upper) {
 
         List<Integer> allBusStates = timestampsForRoute.stream()
                 .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
                 .map(BusStates::getDelay).toList();
 
         Double percentOnTime =
-                ((double) allBusStates.stream().filter(delay -> Math.abs(delay) / 60 <= criteria).count() /
+                ((double) allBusStates.stream().filter(delay -> delay / 60 >= lower && delay / 50 <= upper).count() /
                         allBusStates.size()) * 100;
         if (allBusStates.isEmpty()) {
             return null;
@@ -81,7 +81,7 @@ public class RouteTimestampUtil {
         if (averageDelay.isEmpty()) {
             return null;
         }
-        Double timeInMinutes = averageDelay.getAsDouble() / 60; //convert to minutes
+        double timeInMinutes = averageDelay.getAsDouble() / 60; //convert to minutes
         return floor(timeInMinutes * 1000) / 1000;
     }
 }
