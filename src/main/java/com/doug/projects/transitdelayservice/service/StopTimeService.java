@@ -35,8 +35,7 @@ public class StopTimeService {
         if (hrsMinsSeconds.length < 2) {
             return departureTimes; //we can't split this if the length is incorrect
         }
-        String sb = hrsMinsSeconds[0] + ":" + hrsMinsSeconds[1] + ":00";
-        return sb;
+        return hrsMinsSeconds[0] + ":" + hrsMinsSeconds[1] + ":00";
     }
 
     public List<String> getScheduledDepartureTimesForStop(String stopName, String routeName) {
