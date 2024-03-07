@@ -84,7 +84,7 @@ public class RealtimeResponseConverter {
                 .filter(RealtimeResponseConverter::validateRequiredFields)
                 .collect(Collectors.groupingBy(e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update()
                         .getTrip()
-                        .getRoute_id()))))
+                        .getRoute_id()))))//group by route id
                 .entrySet()
                 .stream()
                 .map(entry -> {

@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.controller;
 
+import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.service.StopMapperService;
 import com.doug.projects.transitdelayservice.service.StopTimeService;
 import com.doug.projects.transitdelayservice.service.TripDelayService;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequiredArgsConstructor
@@ -22,7 +22,8 @@ public class StopController {
     @GetMapping("/v1/searchStop/name")
     public ResponseEntity<List<String>> searchStop(@RequestParam String stopName,
                                                    @RequestParam(defaultValue = "10") Integer limit) {
-        return ResponseEntity.ofNullable(mapperService.searchStops(stopName, limit).toList());
+        return ResponseEntity.ofNullable(mapperService.searchStops(stopName, limit)
+                .toList());
     }
 
     @GetMapping("/v1/searchStop/departures")
@@ -33,14 +34,12 @@ public class StopController {
     }
 
     @GetMapping("/v1/searchStop/stopDelay")
-    public ResponseEntity<Double> getDelayAtStop(@RequestParam String stopName,
-                                                 @RequestParam String routeFriendlyName, @RequestParam String time,
-                                                 @RequestParam(defaultValue = "30") Integer searchPeriod) {
-        Optional<Double> delay =
+    public ResponseEntity<LineGraphDataResponse> getDelayAtStop(@RequestParam String stopName,
+                                                                @RequestParam String routeFriendlyName,
+                                                                @RequestParam String time,
+                                                                @RequestParam(defaultValue = "30") Integer searchPeriod) {
+        LineGraphDataResponse lineGraphDataResponse =
                 tripDelayService.getAverageDelayForStop(stopName, routeFriendlyName, time, searchPeriod);
-        if (delay.isEmpty())
-            return ResponseEntity.notFound().build();
-        else
-            return ResponseEntity.ok(delay.get());
+        return ResponseEntity.ok(lineGraphDataResponse);
     }
 }

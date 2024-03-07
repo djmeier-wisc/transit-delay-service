@@ -2,6 +2,7 @@ package com.doug.projects.transitdelayservice.repository;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.Trip;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
@@ -15,6 +16,7 @@ import java.util.stream.Stream;
 
 @Repository
 @RequiredArgsConstructor
+@Slf4j
 public class TripRepository {
     private final DynamoDbTable<Trip> table;
 
@@ -25,17 +27,23 @@ public class TripRepository {
     }
 
     public Optional<Integer> getRouteIdFor(Integer tripId) {
-        Trip trip = table.getItem(Key.builder()
-                .partitionValue(tripId)
-                .build());
-        if (trip == null) {
+        try {
+            return table.query(QueryConditional.keyEqualTo(Key.builder()
+                            .partitionValue(tripId)
+                            .build()))
+                    .items()
+                    .stream()
+                    .map(Trip::getRoute_id)
+                    .findAny();//this should only ever return 1
+
+        } catch (Exception e) {
+            log.error("Failed to get trip {}", tripId);
             return Optional.empty();
         }
-        return Optional.ofNullable(trip.getRoute_id());
     }
 
     public List<Integer> getTripIdsFor(List<Integer> routeIds) {
-        var index = table.index("route_id-index"); //TODO: THis is broken. Add sort key to this index!
+        var index = table.index("route_id-index");
         return routeIds.parallelStream()
                 .flatMap(routeId -> index.query(QueryEnhancedRequest.builder()
                                 .addAttributeToProject("trip_id")

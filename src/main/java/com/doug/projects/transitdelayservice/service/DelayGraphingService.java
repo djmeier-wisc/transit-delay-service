@@ -4,6 +4,7 @@ import com.doug.projects.transitdelayservice.entity.GraphOptions;
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.TimeBusState;
 import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
 import com.doug.projects.transitdelayservice.util.LineGraphUtil;
 import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
@@ -15,6 +16,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -113,6 +115,57 @@ public class DelayGraphingService {
 
         LineGraphDataResponse response = new LineGraphDataResponse();
         response.setDatasets(lineGraphDataList);
+        response.setLabels(getColumnLabels(finalStartTime, finalEndTime, finalUnits));
+        return response;
+    }
+
+    /**
+     * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
+     *
+     * @param timeBusStates the options used to create a graph
+     * @param units         the function run for after gathering all routeTimestamps.
+     * @return a graph, beginning at startTime, ending at endTime, over the number of units
+     */
+    public LineGraphDataResponse exactTimeBusStateGraph(List<TimeBusState> timeBusStates, Integer units,
+                                                        String routeName) {
+        List<TimeBusState> sortedTimeBusStates = timeBusStates.stream()
+                .sorted(Comparator.comparing(TimeBusState::getTimestamp))
+                .toList();
+        final long finalStartTime = timeBusStates.get(0)
+                .getTimestamp();
+        final long finalEndTime = timeBusStates.get(timeBusStates.size() - 1)
+                .getTimestamp();
+        final int finalUnits = units;
+        if (finalStartTime >= finalEndTime)
+            throw new IllegalArgumentException("startTime must be greater than endTime");
+
+        if (timeBusStates == null) {
+            timeBusStates = Collections.emptyList();
+        }
+        List<Double> currData = new ArrayList<>(finalUnits * 2);
+        double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
+        int lastIndexUsed = 0;
+        for (int currUnit = 0; currUnit < finalUnits; currUnit++) {
+            final long finalCurrEndTime = (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
+            int currLastIndex = sortedTimeBusStates.size();
+            for (int i = lastIndexUsed; i < sortedTimeBusStates.size(); i++) {
+                if (sortedTimeBusStates.get(i)
+                        .getTimestamp() >= finalCurrEndTime) {
+                    currLastIndex = i;
+                    break;
+                }
+            }
+            Double medianBusDelay = sortedTimeBusStates.get((currLastIndex - lastIndexUsed) / 2)
+                    .getDelay() / 60.;
+            currData.add(medianBusDelay);
+            //get ready for next iteration
+            lastIndexUsed = currLastIndex;
+        }
+        LineGraphData lineGraphData = lineGraphUtil.getLineGraphData(routeName, currData, false);
+
+
+        LineGraphDataResponse response = new LineGraphDataResponse();
+        response.setDatasets(List.of(lineGraphData));
         response.setLabels(getColumnLabels(finalStartTime, finalEndTime, finalUnits));
         return response;
     }

@@ -76,4 +76,11 @@ public class RouteMapperService {
     public List<Integer> getRouteIdFor(String routeFriendlyName) {
         return routeNameToIdsMap.getOrDefault(routeFriendlyName, Collections.emptyList());
     }
+
+    public List<String> getFriendlyNames(List<Integer> routeIds) {
+        return routeIds.stream()
+                .map(routeIdToServiceNameMap::get)
+                .distinct()
+                .toList();
+    }
 }
