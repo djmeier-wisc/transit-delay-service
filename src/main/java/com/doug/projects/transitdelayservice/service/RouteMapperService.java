@@ -8,14 +8,18 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Component
 public class RouteMapperService {
-    private static final Map<Integer, String> routeIdToServiceNameMap = new HashMap<>();
-    private static final Map<String, String> serviceNameToColorMap = new HashMap<>();
-    private static final Map<String, Integer> serviceNameToSortOrderMap = new HashMap<>();
+    private static final Map<Integer, String> routeIdToServiceNameMap = new ConcurrentHashMap<>();
+    private static final Map<String, String> serviceNameToColorMap = new ConcurrentHashMap<>();
+    private static final Map<String, Integer> serviceNameToSortOrderMap = new ConcurrentHashMap<>();
 
     /**
      * This is a mess, but yml doesn't support maps by default. To be worked on to make this less static

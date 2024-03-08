@@ -59,9 +59,12 @@ public class RealtimeResponseAdaptor {
      */
     List<RouteTimestamp> convertFrom(RealtimeTransitResponse transitResponse) {
         Long timestampFromMetro = transitResponse.getHeader().getTimestamp();
-        return transitResponse.getEntity().parallelStream().filter(RealtimeResponseAdaptor::validateRequiredFields)
-                .collect(Collectors.groupingBy(e -> routeMapperService.getFriendlyName(Integer.parseInt(e.getTrip_update()
-                        .getTrip().getRoute_id())))).entrySet().stream().map(entry -> {
+        return transitResponse
+                .getEntity()
+                .parallelStream()
+                .filter(RealtimeResponseAdaptor::validateRequiredFields)
+                .collect(Collectors.groupingBy(this::getFriendlyName))
+                .entrySet().stream().map(entry -> {
                     var routeName = entry.getKey();
                     var entityList = entry.getValue();
                     RouteTimestamp rts = new RouteTimestamp();
@@ -80,5 +83,10 @@ public class RealtimeResponseAdaptor {
                     }).collect(Collectors.toList()));
                     return rts;
                 }).collect(Collectors.toList());
+    }
+
+    private String getFriendlyName(Entity e) {
+        return routeMapperService
+                .getFriendlyName(Integer.parseInt(e.getTrip_update().getTrip().getRoute_id()));
     }
 }
