@@ -9,10 +9,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +27,7 @@ import java.util.stream.Collectors;
 public class DelayWriterCronService {
     private final RouteTimestampRepository routeTimestampRepository;
     private final RealtimeMetroService realtimeMetroService;
+    private final RouteMapperService routeMapperService;
     private final RealtimeResponseAdaptor adaptor;
     @Value("${doesCronRun}")
     private Boolean doesCronRun;
@@ -33,7 +41,45 @@ public class DelayWriterCronService {
         return transitResponse == null || transitResponse.getHeader() == null || transitResponse.getHeader().getTimestamp() == null || transitResponse.getEntity() == null;
     }
 
-    @Scheduled(fixedRate = 300000)
+    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.HOURS)
+    public void getGtfsData() {
+        log.info("Checking out routes data from metro...");
+        try (BufferedInputStream GTFS = realtimeMetroService.getGTFSStatic()) {
+            ZipInputStream zis = new ZipInputStream(GTFS);
+            ZipEntry ze = zis.getNextEntry();
+            byte[] buffer = new byte[1024];
+            while (ze != null) {
+                String fileName = ze.getName().replace(".txt", ".csv");
+                if (!fileName.contains("routes.csv")) {
+                    ze = zis.getNextEntry();
+                    continue;
+                }
+                File newFile = new File("files" + File.separator + fileName);
+                log.info("Unzipping to " + newFile.getAbsolutePath());
+                //create directories for sub directories in zip
+                new File(newFile.getParent()).mkdirs();
+                FileOutputStream fos = new FileOutputStream(newFile);
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.close();
+                //close this ZipEntry
+                zis.closeEntry();
+                ze = zis.getNextEntry();
+            }
+            log.info("Completed local write of metro data. Refreshing map...");
+            if (routeMapperService.refreshMaps())
+                log.info("Refreshed map");
+            else
+                log.info("Failed to refresh map");
+        } catch (IOException e) {
+            log.error("Failed to write data from metro!", e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     public void getDelayAndWriteToDb() {
         try {
             if (doesCronRun != null && !doesCronRun)
@@ -50,7 +96,7 @@ public class DelayWriterCronService {
             List<RouteTimestamp> uniqueRouteTimestamps = DelayWriterCronService.removeDuplicates(routeTimestamps);
             log.info("Built model successfully from {} objects, yielding {} values for database write.",
                     transitResponse.getEntity()
-                    .size(), uniqueRouteTimestamps.size());
+                            .size(), uniqueRouteTimestamps.size());
             if (!routeTimestampRepository.writeRouteTimestamps(uniqueRouteTimestamps)) {
                 throw new RuntimeException("Failed to write route timestamps");
             }
