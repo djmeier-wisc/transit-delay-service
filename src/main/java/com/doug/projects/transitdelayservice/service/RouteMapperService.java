@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 @Component
 public class RouteMapperService {
-    private static final Map<Integer, String> routeIdToServiceNameMap = new ConcurrentHashMap<>();
+    private static final Map<String, String> routeIdToServiceNameMap = new ConcurrentHashMap<>();
     private static final Map<String, String> serviceNameToColorMap = new ConcurrentHashMap<>();
     private static final Map<String, Integer> serviceNameToSortOrderMap = new ConcurrentHashMap<>();
 

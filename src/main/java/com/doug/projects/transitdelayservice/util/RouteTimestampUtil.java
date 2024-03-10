@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import org.springframework.util.StringUtils;
 
@@ -27,11 +27,11 @@ public class RouteTimestampUtil {
     public static Double percentOnTime(List<RouteTimestamp> timestampsForRoute, Integer lower, Integer upper) {
 
         List<Integer> allBusStates = timestampsForRoute.stream()
-                .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
-                .map(BusStates::getDelay).toList();
+                .flatMap(rt -> rt.getBusStatesList().stream().map(BusState::fromString))
+                .map(BusState::getDelay).toList();
 
         Double percentOnTime =
-                ((double) allBusStates.stream().filter(delay -> delay / 60 >= lower && delay / 50 <= upper).count() /
+                ((double) allBusStates.stream().filter(delay -> delay / 60 >= lower && delay / 60 <= upper).count() /
                         allBusStates.size()) * 100;
         if (allBusStates.isEmpty()) {
             return null;
@@ -54,24 +54,6 @@ public class RouteTimestampUtil {
                 return null;
             }
         }).filter(Objects::nonNull).max(Integer::compareTo).orElse(-1);
-    }
-
-    /**
-     * Deserializes busStates object from stringToParse.
-     *
-     * @param stringToParse string representation of busStates object. See toString of BusStates
-     * @return busStates object deserialized from stringToParse.
-     */
-    public static BusStates extractBusStates(String stringToParse) {
-        BusStates busStates = new BusStates();
-        String[] vals = stringToParse.split("#");
-        Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
-        String closestStopId = vals.length < 2 ? null : vals[1];
-        Integer tripId = vals.length < 3 ? null : Integer.valueOf(vals[2]);
-        busStates.setDelay(delay);
-        busStates.setClosestStopId(closestStopId);
-        busStates.setTripId(tripId);
-        return busStates;
     }
 
     public static Double getAverageDelayDataForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {

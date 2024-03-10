@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.openmobilityfeed.GTFSDataUrls;
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.openmobilityfeed.OpenMobilitySource;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
@@ -20,12 +20,12 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
-public class GtfsRtFeedAggregator {
+public class GtfsFeedAggregator {
     @Value("${openMobilityData.feedSource}")
     private String feedUrl;
 
     private static boolean isTripUpdateFeed(OpenMobilitySource f) {
-        return "US".equals(f.getCountryCode()) && "tu".equals(f.getEntityType()) && StringUtils.isBlank(f.getStatus());
+        return "US".equals(f.getCountryCode()) && "tu".equals(f.getEntityType()) && StringUtils.isBlank(f.getStatus()) && StringUtils.isNotBlank(f.getStaticReference());
     }
 
     public List<OpenMobilitySource> gatherAllFeedData() {
@@ -52,29 +52,36 @@ public class GtfsRtFeedAggregator {
      *
      * @return
      */
-    public List<GTFSDataUrls> gatherRTFeeds() {
+    public List<AgencyFeed> gatherRTFeeds() {
         List<OpenMobilitySource> allSources = gatherAllFeedData();
+        //all OMS, grouped by id
         Map<String, OpenMobilitySource> allSourcesMap = allSources.stream()
                 .collect(Collectors.toMap(OpenMobilitySource::getMdbSourceId, Function.identity()));
+        //all redirect ids, mapped to their old OMS
         Map<String, OpenMobilitySource> redirectMap = allSources.stream()
                 .filter(o -> StringUtils.isNotBlank(o.getRedirectId()))
                 .collect(Collectors.toMap(OpenMobilitySource::getRedirectId, Function.identity()));
+        //all realTime tripUpdate feeds
         List<OpenMobilitySource> rtFeeds = allSources.stream()
-                .filter(GtfsRtFeedAggregator::isTripUpdateFeed)
+                .filter(GtfsFeedAggregator::isTripUpdateFeed)
                 .toList();
 
 
-        return rtFeeds.stream()
+        List<AgencyFeed> agencyFeeds = rtFeeds.stream()
                 .map(rtFeed -> {
                     OpenMobilitySource staticFeed = allSourcesMap.get(rtFeed.getStaticReference());
 
-                    return GTFSDataUrls.builder()
-                            .realtimeUrl(rtFeed.getLatestUrl())
-                            .staticUrl(staticFeed.getLatestUrl())
-                            .realtimeOpenMobilityId(findRootRTFeed(rtFeed.getMdbSourceId(), allSourcesMap, redirectMap))
+                    return AgencyFeed.builder()
+                            .realTimeUrl(rtFeed.getDirectDownloadUrl())
+                            .staticUrl(staticFeed.getDirectDownloadUrl())
+                            .id(findRootRTFeed(rtFeed.getMdbSourceId(), allSourcesMap, redirectMap))
+                            .status(AgencyFeed.Status.ACTIVE.toString())
+                            .name(rtFeed.getProvider())
+                            .state(rtFeed.getSubdivisionName())
                             .build();
                 })
                 .toList();
+        return agencyFeeds;
     }
 
     /**
