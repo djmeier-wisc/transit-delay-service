@@ -19,7 +19,7 @@ public class CronService {
     private final GtfsStaticParserService gtfsStaticParserService;
     private final AgencyFeedRepository agencyFeedRepository;
     private final GtfsFeedAggregator gtfsFeedAggregator;
-    private final RtResponseMapperService adaptor;
+    private final RtResponseMapperService rtResponseService;
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     @Value("${doesCronRun}")
     private Boolean doesCronRun;
@@ -66,11 +66,10 @@ public class CronService {
 
     //@Scheduled(fixedRate = 1, timeUnit = TimeUnit.HOURS)
     public void writeRoutes() {
-        //TODO: add error handling enum
         agencyFeedRepository.getACTStatusAgencyFeeds().stream()
-                .map(feed ->
-                        gtfsStaticParserService.writeStaticDataAsync(feed.getStaticUrl(), feed.getId())
-                                .completeOnTimeout(null, 60, TimeUnit.SECONDS))
+                .map(feed -> gtfsStaticParserService
+                        .writeStaticDataAsync(feed.getStaticUrl(), feed.getId())
+                        .completeOnTimeout(null, 60, TimeUnit.SECONDS)) //set timeout to avoid thread starvation
                 .reduce(CompletableFuture::allOf)
                 .orElse(CompletableFuture.completedFuture(null))
                 .join();
@@ -79,15 +78,16 @@ public class CronService {
 
     @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     public void writeRTData() {
-        var completableFutureList = agencyFeedRepository
+        agencyFeedRepository
                 .getACTStatusAgencyFeeds()
                 .stream()
-                .map(agencyFeed -> adaptor
+                .map(agencyFeed -> rtResponseService
                         .convertFromAsync(agencyFeed.getId(), agencyFeed.getRealTimeUrl())
-                        .completeOnTimeout(Collections.emptyList(), 60, TimeUnit.SECONDS)
+                        .completeOnTimeout(Collections.emptyList(), 60, TimeUnit.SECONDS) //set timeout to avoid thread starvation
                         .thenAcceptAsync(routeTimestampRepository::saveAll))
-                .toList();
-        CompletableFuture.allOf(completableFutureList.toArray(new CompletableFuture[0])).join();
+                .reduce(CompletableFuture::allOf)
+                .orElse(CompletableFuture.completedFuture(null))
+                .join();
 
         log.info("Writing RT Data...");
     }

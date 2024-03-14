@@ -59,7 +59,7 @@ public class AgencyRouteTimestamp {
     /**
      * Get a copy of the list of bus states. Changes to this list are not propagated, use setBusStates()
      *
-     * @return an modifiable list copy of busStatesLIst
+     * @return a modifiable list copy of busStatesLIst
      */
     public List<BusState> getBusStatesCopyList() {
         return busStatesList.stream().map(BusState::fromString).collect(Collectors.toList());

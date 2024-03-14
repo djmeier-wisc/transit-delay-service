@@ -1,8 +1,11 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRoute;
+import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.entity.gtfs.csv.RoutesAttributes;
-import com.doug.projects.transitdelayservice.repository.RoutesRepository;
+import com.doug.projects.transitdelayservice.entity.gtfs.csv.StopAttributes;
+import com.doug.projects.transitdelayservice.entity.gtfs.csv.StopTimeAttributes;
+import com.doug.projects.transitdelayservice.entity.gtfs.csv.TripAttributes;
+import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvSchema;
@@ -23,26 +26,54 @@ import java.util.concurrent.CompletableFuture;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.ROUTE;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.getType;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GtfsStaticParserService {
-    private final RoutesRepository routesRepository;
+    private final GtfsStaticRepository gtfsStaticRepository;
 
-    private static AgencyRoute convert(RoutesAttributes routesAttributes, String agencyId) {
-        String routeName = routesAttributes.getRoute_short_name();
+    private static GtfsStaticData convert(RoutesAttributes routesAttributes, String agencyId) {
+        String routeName = routesAttributes.getRouteShortName();
         if (StringUtils.isBlank(routeName)) {
-            routeName = routesAttributes.getRoute_service_name();
+            routeName = routesAttributes.getRouteServiceName();
         }
-        return AgencyRoute.builder()
-                .routeId(String.valueOf(routesAttributes.getRoute_id()))
-                .routeName(routeName)
-                .agencyId(agencyId)
-                .color(routesAttributes.getRoute_color())
-                .sortOrder(routesAttributes.getRoute_sort_order())
-                .build();
+        GtfsStaticData staticData = new GtfsStaticData();
+        staticData.setAgencyType(agencyId, ROUTE);
+        staticData.setId(routesAttributes.getRouteId());
+        staticData.setRouteName(routeName);
+        staticData.setRouteColor('#' + routesAttributes.getRouteColor());
+        staticData.setRouteSortOrder(routesAttributes.getRouteSortOrder());
+        return staticData;
     }
 
+    private static GtfsStaticData convert(StopAttributes stopAttributes, String agencyId) {
+        GtfsStaticData staticData = new GtfsStaticData();
+        staticData.setAgencyType(agencyId, ROUTE);
+        staticData.setId(String.valueOf(stopAttributes.getStopId()));
+        staticData.setStopName(stopAttributes.getStopName());
+        staticData.setStopLat(stopAttributes.getStopLat());
+        staticData.setStopLon(stopAttributes.getStopLon());
+        return staticData;
+    }
+
+    private static GtfsStaticData convert(TripAttributes tripAttributes, String agencyId) {
+        GtfsStaticData staticData = new GtfsStaticData();
+        staticData.setAgencyType(agencyId, STOPTIME);
+        staticData.setId(tripAttributes.getTripId());
+        staticData.setRouteId(tripAttributes.get());
+        return staticData;
+    }
+
+    private static GtfsStaticData convert(StopTimeAttributes stopTimeAttributes, String agencyId) {
+        GtfsStaticData staticData = new GtfsStaticData();
+        staticData.setAgencyType(agencyId, STOPTIME);
+        staticData.setId(String.valueOf(stopTimeAttributes.getStopId()), stopTimeAttributes.getStopSequence());
+        return staticData;
+    }
     private static boolean writeGtfsRoutesToDisk(String staticUrl, String id) {
         log.info("Checking out routes data from {}, id {}", staticUrl, id);
         try (BufferedInputStream GTFS = new BufferedInputStream(new URL(staticUrl).openStream())) {
@@ -50,13 +81,14 @@ public class GtfsStaticParserService {
             ZipEntry ze = zis.getNextEntry();
             byte[] buffer = new byte[1024];
             while (ze != null) {
-                String fileName = ze.getName();
-                if (!fileName.contains("routes.txt")) {
+                String fileName = ze.getName().replace(".txt", ".csv");
+                GtfsStaticData.TYPE type = getType(fileName);
+                if (type == null) {
                     zis.closeEntry();
                     ze = zis.getNextEntry();
                     continue;
                 }
-                File newFile = new File("files" + File.separator + id + "-routes.csv");
+                File newFile = new File("files" + File.separator + id + File.separator + type.getFileName());
                 //create directories for sub directories in zip
                 new File(newFile.getParent()).mkdirs();
                 FileOutputStream fos = new FileOutputStream(newFile);
@@ -71,7 +103,7 @@ public class GtfsStaticParserService {
                 return true;
             }
         } catch (IOException e) {
-            log.error("Failed to write data from metro!", e);
+            return false;
         }
         return false;
     }
@@ -88,31 +120,63 @@ public class GtfsStaticParserService {
             log.debug("Write failed for id: {}, url: {}", agencyId, staticUrl);
             return null;
         }
+
+        for (GtfsStaticData.TYPE value : GtfsStaticData.TYPE.values()) {
+            File file = new File("files" + File.separator + agencyId + File.separator + value.getFileName());
+            try {
+                switch (value) {
+                    case ROUTE -> readGtfsAndSaveToDb(agencyId, file, RoutesAttributes.class);
+                    case TRIP -> readGtfsAndSaveToDb(agencyId, file, TripAttributes.class);
+                    case STOPTIME -> readGtfsAndSaveToDb(agencyId, file, StopTimeAttributes.class);
+                    case STOP -> readGtfsAndSaveToDb(agencyId, file, StopAttributes.class);
+                    //TODO consider shapes.txt, maybe add it in the future?
+                }
+                file.delete();
+                log.debug("Write finished for id: {}, url: {}", agencyId, staticUrl);
+                return null;
+            } catch (IOException e) {
+                file.delete();
+                log.error("Read file failed for id: {}, url: {}", agencyId, staticUrl);
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Generic converter to read from file and write to dynamo.
+     *
+     * @param agencyId the agencyId to write to dynamo from
+     * @param file     the file to read from
+     * @param clazz    instance of T
+     * @param <T>      an Attributes class used to map against .csv file passed in. Should be
+     * @throws IOException
+     */
+    private <T> void readGtfsAndSaveToDb(String agencyId, File file, Class<T> clazz) throws IOException {
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
-        File file = new File("files" + File.separator + agencyId + "-routes.csv");
-        try {
-            MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper
-                    .readerWithSchemaFor(RoutesAttributes.class)
-                    .with(schema)
-                    .readValues(file);
-            List<AgencyRoute> agencyRouteList = new ArrayList<>(50);
-            while (routesAttributesIterator.hasNext()) {
-                RoutesAttributes routesAttributes = routesAttributesIterator.next();
-                agencyRouteList.add(convert(routesAttributes, agencyId));
-                if (agencyRouteList.size() >= 25) {
-                    routesRepository.saveAll(agencyRouteList);
-                    agencyRouteList.clear();
-                }
+        MappingIterator<T> attributesIterator = csvMapper
+                .readerWithSchemaFor(clazz)
+                .with(schema)
+                .readValues(file);
+        List<GtfsStaticData> gtfsList = new ArrayList<>(50);
+        while (attributesIterator.hasNext()) {
+            T attributes = attributesIterator.next();
+            if (attributes instanceof RoutesAttributes)
+                gtfsList.add(convert((RoutesAttributes) attributes, agencyId));
+            else if (attributes instanceof StopAttributes)
+                gtfsList.add(convert((StopAttributes) attributes, agencyId));
+            else if (attributes instanceof TripAttributes)
+                gtfsList.add(convert((TripAttributes) attributes, agencyId));
+            else if (attributes instanceof StopTimeAttributes)
+                gtfsList.add(convert((StopTimeAttributes) attributes, agencyId));
+            else
+                attributesIterator.close();
+            if (gtfsList.size() >= 25) {
+                gtfsStaticRepository.saveAll(gtfsList);
+                gtfsList.clear();
             }
-            routesAttributesIterator.close();
-            file.delete();
-            log.debug("Write finished for id: {}, url: {}", agencyId, staticUrl);
-            return null;
-        } catch (IOException e) {
-            file.delete();
-            log.error("Write failed for id: {}, url: {}", agencyId, staticUrl);
-            return null;
         }
+        attributesIterator.close();
     }
 }

@@ -11,24 +11,14 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 @NoArgsConstructor
 @Builder
 public class AgencyFeed {
-    @Getter(AccessLevel.NONE)
+    @Getter(onMethod = @__(@DynamoDbPartitionKey))
     private String status;
-    @Getter(AccessLevel.NONE)
+    @Getter(onMethod = @__(@DynamoDbSortKey))
     private String id;
     private String name;
     private String realTimeUrl;
     private String staticUrl;
     private String state;
-
-    @DynamoDbPartitionKey
-    public String getStatus() {
-        return status;
-    }
-
-    @DynamoDbSortKey
-    public String getId() {
-        return id;
-    }
 
     public enum Status {
         ACTIVE("ACT"),
