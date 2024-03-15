@@ -30,7 +30,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.getType;
 
 @Service
 @RequiredArgsConstructor
@@ -231,5 +230,22 @@ public class GtfsStaticParserService {
         } catch (IOException e) {
             log.error("Failed to read file: {}", file.getName(), e);
         }
+    }
+
+    /**
+     * Gets the type associated with this fileName. If no TYPE is found, return null.
+     * Useful for checking if this is a GTFS file we want to write to disk for further parsing.
+     *
+     * @param fileName the fileName to check TYPE against
+     * @return the TYPE, if found, null otherwise.
+     */
+    @Nullable
+    public static GtfsStaticData.TYPE getType(String fileName) {
+        for (GtfsStaticData.TYPE type : GtfsStaticData.TYPE.values()) {
+            if (type.getFileName().equals(fileName)) {
+                return type;
+            }
+        }
+        return null;
     }
 }

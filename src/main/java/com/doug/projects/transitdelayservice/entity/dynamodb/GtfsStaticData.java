@@ -3,21 +3,22 @@ package com.doug.projects.transitdelayservice.entity.dynamodb;
 import lombok.Data;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.Nullable;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
 @Data
 @DynamoDbBean
 public class GtfsStaticData {
+    public static final String AGENCY_TYPE_INDEX = "agencyType-index";
     //{agency_id}:{type}
-    @Getter(onMethod = @__(@DynamoDbSortKey))
+    @Getter(onMethod = @__({@DynamoDbSortKey, @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX})}))
     private String agencyType;
     //route_id, trip_id, trip_id:stop_sequence (for stopTime), stop_id
     //although unintuitive, this is the PK to prevent hot partitions
     //read indexes will be needed to query this data
-    @Getter(onMethod = @__(@DynamoDbPartitionKey))
+    @Getter(onMethod = @__({@DynamoDbPartitionKey}))
     private String id;
     //used for trips and routes
     private String routeName;
@@ -28,23 +29,6 @@ public class GtfsStaticData {
     private String stopId;
     private Double stopLat;
     private Double stopLon;
-
-    /**
-     * Gets the type associated with this fileName. If no TYPE is found, return null.
-     * Useful for checking if this is a GTFS file we want to write to disk for further parsing.
-     *
-     * @param fileName the fileName to check TYPE against
-     * @return the TYPE, if found, null otherwise.
-     */
-    @Nullable
-    public static TYPE getType(String fileName) {
-        for (TYPE type : TYPE.values()) {
-            if (type.getFileName().equals(fileName)) {
-                return type;
-            }
-        }
-        return null;
-    }
 
     public void setAgencyType(String agencyId, TYPE type) {
         this.agencyType = agencyId + ":" + type.getName();

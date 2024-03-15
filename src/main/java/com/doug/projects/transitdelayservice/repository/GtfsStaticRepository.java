@@ -5,15 +5,17 @@ import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
-import software.amazon.awssdk.enhanced.dynamodb.model.BatchWriteItemEnhancedRequest;
-import software.amazon.awssdk.enhanced.dynamodb.model.BatchWriteResult;
-import software.amazon.awssdk.enhanced.dynamodb.model.WriteBatch;
+import software.amazon.awssdk.enhanced.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -96,5 +98,67 @@ public class GtfsStaticRepository {
             log.error("Unprocessed items: {}", r.unprocessedPutItemsForTable(table));
             asyncBatchWrite(r.unprocessedPutItemsForTable(table)).join();
         }
+    }
+
+    /**
+     * Finds all route names for a particular agencyId.
+     * Note that this can either be routeShortName or routeLongName, depending on which was specified in routes.txt file.
+     *
+     * @param agencyId the agencyId to search the DB for
+     * @return the routeNames associated with that agency.
+     */
+    public List<String> findAllRouteNames(String agencyId) {
+        QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
+                k.partitionValue(agencyId + GtfsStaticData.TYPE.ROUTE.getName()));
+        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .addAttributeToProject("routeName")
+                .addAttributeToProject("routeSortOrder")
+                .build();
+        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table
+                .index(GtfsStaticData.AGENCY_TYPE_INDEX)
+                .query(queryEnhancedRequest);
+        //RxJava stuff. Convert the list query to a list of routeName, get distinct, and return as list.
+        return Flux.concat(sdkPublisher)
+                .flatMapIterable(Page::items)
+                .sort(Comparator.comparing(GtfsStaticData::getRouteSortOrder))
+                .map(GtfsStaticData::getRouteName)
+                .distinct()
+                .collectList()
+                .block();
+    }
+
+    public Optional<String> getRouteNameByRoute(String agencyId, String routeId) {
+        QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
+                k.partitionValue(routeId).sortValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
+        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .build();
+        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table
+                .query(queryEnhancedRequest);
+        List<String> result = Flux.concat(sdkPublisher)
+                .flatMapIterable(Page::items)
+                .map(GtfsStaticData::getRouteName)
+                .collectList()
+                .block();
+        if (result == null || result.isEmpty()) return Optional.empty();
+        return Optional.of(result.get(0));
+    }
+
+    public Optional<String> getRouteNameByTrip(String agencyId, String tripId) {
+        QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
+                k.partitionValue(tripId).sortValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
+        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .build();
+        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table
+                .query(queryEnhancedRequest);
+        List<java.lang.String> result = Flux.concat(sdkPublisher)
+                .flatMapIterable(Page::items)
+                .map(GtfsStaticData::getRouteName)
+                .collectList()
+                .block();
+        if (result == null || result.isEmpty()) return Optional.empty();
+        return Optional.of(result.get(0));
     }
 }

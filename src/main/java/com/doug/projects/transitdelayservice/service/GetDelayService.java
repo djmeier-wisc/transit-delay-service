@@ -4,6 +4,7 @@ import com.doug.projects.transitdelayservice.entity.GraphOptions;
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
+import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
 import com.doug.projects.transitdelayservice.util.LineGraphUtil;
 import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
@@ -25,7 +26,7 @@ import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumn
 @Slf4j
 public class GetDelayService {
     private final RouteTimestampRepository repository;
-    private final RouteMapperService routeMapperService;
+    private final GtfsStaticRepository gtfsStaticRepository;
     private final LineGraphUtil lineGraphUtil;
 
 
@@ -74,7 +75,8 @@ public class GetDelayService {
         final long finalStartTime = graphOptions.getStartTime() == null ? TransitDateUtil.getMidnightSixDaysAgo() : graphOptions.getStartTime();
         final long finalEndTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
         final int finalUnits = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
-        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? routeMapperService.getAllFriendlyNames() : graphOptions.getRoutes();
+        final String agencyId = graphOptions.getAgencyId() == null ? "394" : graphOptions.getAgencyId(); //default to calling metro transit
+        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(graphOptions.getAgencyId()) : graphOptions.getRoutes();
         final boolean finalUseColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
         if (finalStartTime >= finalEndTime)
             throw new IllegalArgumentException("startTime must be greater than endTime");
