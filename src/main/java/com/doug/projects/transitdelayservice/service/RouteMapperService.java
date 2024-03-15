@@ -34,12 +34,12 @@ public class RouteMapperService {
             MappingIterator<RoutesAttributes> routesAttributesIterator = csvMapper.readerWithSchemaFor(RoutesAttributes.class).with(schema).readValues(file);
             List<RoutesAttributes> routesAttributes = routesAttributesIterator.readAll();
             routeIdToServiceNameMap.putAll(routesAttributes.stream()
-                    .collect(Collectors.toMap(RoutesAttributes::getRoute_id, RoutesAttributes::getRoute_short_name,
+                    .collect(Collectors.toMap(RoutesAttributes::getRouteId, RoutesAttributes::getRouteShortName,
                             (first, second) -> second)));
             serviceNameToColorMap.putAll(routesAttributes.stream()
-                    .collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, ra -> "#" +
-                            ra.getRoute_color(), (first, second) -> second)));
-            serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRoute_short_name, RoutesAttributes::getRoute_sort_order, (first, second) -> second)));
+                    .collect(Collectors.toMap(RoutesAttributes::getRouteShortName, ra -> "#" +
+                            ra.getRouteColor(), (first, second) -> second)));
+            serviceNameToSortOrderMap.putAll(routesAttributes.stream().collect(Collectors.toMap(RoutesAttributes::getRouteShortName, RoutesAttributes::getRouteSortOrder, (first, second) -> second)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to load values into map!", e);
         }

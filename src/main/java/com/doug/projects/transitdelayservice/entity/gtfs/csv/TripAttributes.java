@@ -9,5 +9,6 @@ import lombok.Data;
 public class TripAttributes {
     @JsonProperty("trip_id")
     private String tripId;
-
+    @JsonProperty("route_id")
+    private String routeId;
 }

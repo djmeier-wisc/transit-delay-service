@@ -5,18 +5,17 @@ import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepo
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CronService {
-    private final GtfsStaticParserService gtfsStaticParserService;
+    private final GtfsStaticParserService staticService;
     private final AgencyFeedRepository agencyFeedRepository;
     private final GtfsFeedAggregator gtfsFeedAggregator;
     private final RtResponseMapperService rtResponseService;
@@ -64,31 +63,24 @@ public class CronService {
         }
     }
 
-    //@Scheduled(fixedRate = 1, timeUnit = TimeUnit.HOURS)
-    public void writeRoutes() {
-        agencyFeedRepository.getACTStatusAgencyFeeds().stream()
-                .map(feed -> gtfsStaticParserService
-                        .writeStaticDataAsync(feed.getStaticUrl(), feed.getId())
-                        .completeOnTimeout(null, 60, TimeUnit.SECONDS)) //set timeout to avoid thread starvation
-                .reduce(CompletableFuture::allOf)
-                .orElse(CompletableFuture.completedFuture(null))
-                .join();
-        log.info("Finished Routes write");
-    }
-
-    @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
-    public void writeRTData() {
-        agencyFeedRepository
-                .getACTStatusAgencyFeeds()
-                .stream()
-                .map(agencyFeed -> rtResponseService
-                        .convertFromAsync(agencyFeed.getId(), agencyFeed.getRealTimeUrl())
-                        .completeOnTimeout(Collections.emptyList(), 60, TimeUnit.SECONDS) //set timeout to avoid thread starvation
-                        .thenAcceptAsync(routeTimestampRepository::saveAll))
-                .reduce(CompletableFuture::allOf)
-                .orElse(CompletableFuture.completedFuture(null))
-                .join();
-
-        log.info("Writing RT Data...");
+    /**
+     * Writes all ACT agency's data to DynamoDb for processing.
+     * Done asynchronously to avoid blocking scheduler thread.
+     */
+    @Scheduled(fixedRate = 7, timeUnit = TimeUnit.DAYS)
+    @Async
+    public void writeGtfsStaticData() {
+        log.info("Starting static data write");
+        agencyFeedRepository.getACTStatusAgencyFeeds()
+                .forEach(feed -> staticService
+                        .writeGtfsRoutesToDiskAsync(feed.getStaticUrl(), feed.getId(), 60)
+                        //set timeout to avoid thread starvation, unreliable urls
+                        .thenAcceptAsync((s) -> {
+                            if (s.isSuccess())
+                                staticService.writeGtfsStaticDataToDynamoFromDiskSync(s.getFeedId());
+                            //TODO failure case...
+                        }).join()
+                );
+        log.info("Finished static data write");
     }
 }

@@ -15,6 +15,6 @@ public class RoutesAttributes {
     private String routeShortName;
     @JsonProperty("route_color")
     private String routeColor;
-    @JsonProperty("route_service_name")
-    private String routeServiceName;
+    @JsonProperty("route_long_name")
+    private String routeLongName;
 }

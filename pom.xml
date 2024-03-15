@@ -81,6 +81,12 @@
 			<artifactId>protobuf-java</artifactId>
 			<version>3.25.3</version>
 		</dependency>
+		<dependency>
+			<groupId>org.zeroturnaround</groupId>
+			<artifactId>zt-zip</artifactId>
+			<version>1.17</version>
+			<type>jar</type>
+		</dependency>
 	</dependencies>
 
 	<build>

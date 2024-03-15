@@ -12,10 +12,12 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 @DynamoDbBean
 public class GtfsStaticData {
     //{agency_id}:{type}
-    @Getter(onMethod = @__(@DynamoDbPartitionKey))
+    @Getter(onMethod = @__(@DynamoDbSortKey))
     private String agencyType;
     //route_id, trip_id, trip_id:stop_sequence (for stopTime), stop_id
-    @Getter(onMethod = @__(@DynamoDbSortKey))
+    //although unintuitive, this is the PK to prevent hot partitions
+    //read indexes will be needed to query this data
+    @Getter(onMethod = @__(@DynamoDbPartitionKey))
     private String id;
     //used for trips and routes
     private String routeName;
@@ -27,6 +29,13 @@ public class GtfsStaticData {
     private Double stopLat;
     private Double stopLon;
 
+    /**
+     * Gets the type associated with this fileName. If no TYPE is found, return null.
+     * Useful for checking if this is a GTFS file we want to write to disk for further parsing.
+     *
+     * @param fileName the fileName to check TYPE against
+     * @return the TYPE, if found, null otherwise.
+     */
     @Nullable
     public static TYPE getType(String fileName) {
         for (TYPE type : TYPE.values()) {
@@ -73,13 +82,18 @@ public class GtfsStaticData {
         return StringUtils.substringAfter(id, ":");
     }
 
+    /**
+     * A list of GTFS file types. This list is not comprehensive, but represents what we actually care about reading.
+     * Shape is commented out, since it isn't needed yet. It might be needed in the future for map display related things.
+     */
     @Getter
     public enum TYPE {
         ROUTE("ROUTE", "routes.csv"),
         TRIP("TRIP", "trips.csv"),
-        STOPTIME("STOPTIME", "stop_times.csv"),
         STOP("STOP", "stops.csv"),
-        SHAPE("SHAPE", "shapes.csv")
+        STOPTIME("STOPTIME", "stop_times.csv"),
+
+//        SHAPE("SHAPE", "shapes.csv")
         ;
         private final String name;
         private final String fileName;
