@@ -41,9 +41,11 @@ public class CronService {
      * Writes all ACT agency's data to DynamoDb for processing.
      * Done asynchronously to avoid blocking scheduler thread.
      */
-//    @Scheduled(fixedRate = 7, timeUnit = TimeUnit.DAYS)
+    @Scheduled(fixedRate = 7, timeUnit = TimeUnit.DAYS)
     @Async
     public void writeGtfsStaticData() {
+        if (!doesCronRun)
+            return;
         log.info("Starting static data write");
         agencyFeedRepository.getACTStatusAgencyFeeds()
                 .forEach(feed -> staticService
@@ -62,16 +64,18 @@ public class CronService {
      * Writes all ACT agency's data to DynamoDb for processing.
      * Done asynchronously to avoid blocking scheduler thread.
      */
-    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     @Async
     public void writeGtfsRealtimeData() {
-        log.info("Starting static data write");
+        if (!doesCronRun)
+            return;
+        log.info("Starting realtime data write");
         agencyFeedRepository.getACTStatusAgencyFeeds()
                 .stream().map(feed -> //TODO failure case...
                         rtResponseService.convertFromAsync(feed.getId(), feed.getRealTimeUrl())
                                 //set timeout to avoid thread starvation, unreliable urls
                                 .thenAcceptAsync(routeTimestampRepository::saveAll)
                 ).reduce(CompletableFuture::allOf).get().join();
-        log.info("Finished static data write");
+        log.info("Finished realtime data write");
     }
 }

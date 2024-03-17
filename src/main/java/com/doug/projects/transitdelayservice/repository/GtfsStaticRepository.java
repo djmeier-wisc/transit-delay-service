@@ -19,6 +19,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
+
 @Repository
 @Slf4j
 public class GtfsStaticRepository {
@@ -115,8 +117,7 @@ public class GtfsStaticRepository {
                 .addAttributeToProject("routeName")
                 .addAttributeToProject("routeSortOrder")
                 .build();
-        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table
-                .index(GtfsStaticData.AGENCY_TYPE_INDEX)
+        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table.index(AGENCY_TYPE_INDEX)
                 .query(queryEnhancedRequest);
         //RxJava stuff. Convert the list query to a list of routeName, get distinct, and return as list.
         return Flux.concat(sdkPublisher)
@@ -159,6 +160,46 @@ public class GtfsStaticRepository {
                 .collectList()
                 .block();
         if (result == null || result.isEmpty()) return Optional.empty();
+        return Optional.of(result.get(0));
+    }
+
+    public Optional<String> getColorFor(String agencyId, String routeFriendlyName) {
+        QueryConditional queryConditional =
+                QueryConditional.keyEqualTo(k -> k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName())
+                        .sortValue(routeFriendlyName));
+        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
+                .addAttributeToProject("routeColor")
+                .queryConditional(queryConditional)
+                .build();
+        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table.index(AGENCY_TYPE_INDEX)
+                .query(queryEnhancedRequest);
+        List<String> result = Flux.concat(sdkPublisher)
+                .flatMapIterable(Page::items)
+                .map(GtfsStaticData::getRouteColor)
+                .collectList()
+                .block();
+        if (result == null || result.isEmpty())
+            return Optional.empty();
+        return Optional.of(result.get(0));
+    }
+
+    public Optional<Integer> getSortOrderFor(String agencyId, String routeFriendlyName) {
+        QueryConditional queryConditional =
+                QueryConditional.keyEqualTo(k -> k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName())
+                        .sortValue(routeFriendlyName));
+        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
+                .addAttributeToProject("routeSortOrder")
+                .queryConditional(queryConditional)
+                .build();
+        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table.index(AGENCY_TYPE_INDEX)
+                .query(queryEnhancedRequest);
+        List<Integer> result = Flux.concat(sdkPublisher)
+                .flatMapIterable(Page::items)
+                .map(GtfsStaticData::getRouteSortOrder)
+                .collectList()
+                .block();
+        if (result == null || result.isEmpty())
+            return Optional.empty();
         return Optional.of(result.get(0));
     }
 }

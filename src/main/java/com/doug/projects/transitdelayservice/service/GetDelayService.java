@@ -109,9 +109,10 @@ public class GetDelayService {
             } catch (Exception e) {
                 log.error("Failed to create for friendlyName: {}", routeFriendlyName, e);
             }
-            return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData, finalUseColor);
+            return lineGraphUtil.getLineGraphData(graphOptions.getAgencyId(), routeFriendlyName.getKey(), currData,
+                    finalUseColor);
         }).collect(Collectors.toList());
-        lineGraphUtil.sortByGTFSSortOrder(lineGraphDataList);
+        lineGraphUtil.sortByGTFSSortOrder(agencyId, lineGraphDataList);
 
         LineGraphDataResponse response = new LineGraphDataResponse();
         response.setDatasets(lineGraphDataList);

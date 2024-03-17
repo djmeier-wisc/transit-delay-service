@@ -19,8 +19,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRoute.UNKNOWN_ROUTE;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -59,7 +57,7 @@ public class GtfsRealtimeParserService {
         if (routeName.isEmpty()) {
             routeName = repository.getRouteNameByTrip(agencyId, tripId);
         }
-        return routeName.orElseGet(UNKNOWN_ROUTE::getRouteName);
+        return routeName.orElse("UNKNOWN_ROUTE");
     }
 
     @NotNull

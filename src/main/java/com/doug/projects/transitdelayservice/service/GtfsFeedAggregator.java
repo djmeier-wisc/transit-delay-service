@@ -67,7 +67,7 @@ public class GtfsFeedAggregator {
                 .toList();
 
 
-        List<AgencyFeed> agencyFeeds = rtFeeds.stream()
+        return rtFeeds.stream()
                 .map(rtFeed -> {
                     OpenMobilitySource staticFeed = allSourcesMap.get(rtFeed.getStaticReference());
 
@@ -81,7 +81,6 @@ public class GtfsFeedAggregator {
                             .build();
                 })
                 .toList();
-        return agencyFeeds;
     }
 
     /**

@@ -3,17 +3,16 @@ package com.doug.projects.transitdelayservice.entity.dynamodb;
 import lombok.Data;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.*;
 
 @Data
 @DynamoDbBean
 public class GtfsStaticData {
     public static final String AGENCY_TYPE_INDEX = "agencyType-index";
+    public static final String AGENCY_TYPE_ROUTE_NAME_INDEX = "agencyType-routeName-index";
     //{agency_id}:{type}
-    @Getter(onMethod = @__({@DynamoDbSortKey, @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX})}))
+    @Getter(onMethod = @__({@DynamoDbSortKey,
+            @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX, AGENCY_TYPE_ROUTE_NAME_INDEX})}))
     private String agencyType;
     //route_id, trip_id, trip_id:stop_sequence (for stopTime), stop_id
     //although unintuitive, this is the PK to prevent hot partitions
@@ -21,6 +20,7 @@ public class GtfsStaticData {
     @Getter(onMethod = @__({@DynamoDbPartitionKey}))
     private String id;
     //used for trips and routes
+    @Getter(onMethod = @__({@DynamoDbSecondarySortKey(indexNames = {AGENCY_TYPE_ROUTE_NAME_INDEX})}))
     private String routeName;
     private String routeColor;
     private Integer routeSortOrder;
@@ -40,7 +40,8 @@ public class GtfsStaticData {
             return null;
         }
         for (TYPE value : TYPE.values()) {
-            if (value.getName().equals(split[1])) {
+            if (value.getName()
+                    .equals(split[1])) {
                 return value;
             }
         }
@@ -68,16 +69,15 @@ public class GtfsStaticData {
 
     /**
      * A list of GTFS file types. This list is not comprehensive, but represents what we actually care about reading.
-     * Shape is commented out, since it isn't needed yet. It might be needed in the future for map display related things.
+     * Shape is commented out, since it isn't needed yet. It might be needed in the future for map display related
+     * things.
      */
     @Getter
     public enum TYPE {
-        ROUTE("ROUTE", "routes.csv"),
-        TRIP("TRIP", "trips.csv"),
-        STOP("STOP", "stops.csv"),
-        STOPTIME("STOPTIME", "stop_times.csv"),
+        ROUTE("ROUTE", "routes.csv"), TRIP("TRIP", "trips.csv"), STOP("STOP", "stops.csv"), STOPTIME("STOPTIME",
+                "stop_times.csv"),
 
-//        SHAPE("SHAPE", "shapes.csv")
+        //        SHAPE("SHAPE", "shapes.csv")
         ;
         private final String name;
         private final String fileName;

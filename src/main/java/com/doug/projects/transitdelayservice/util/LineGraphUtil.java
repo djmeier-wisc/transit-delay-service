@@ -1,8 +1,8 @@
 package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
-import com.doug.projects.transitdelayservice.service.RouteMapperService;
-import lombok.AllArgsConstructor;
+import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.TimeZone;
 
 @Component
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class LineGraphUtil {
-    private RouteMapperService routesService;
+    private final GtfsStaticRepository gtfsStaticRepository;
 
     public static List<String> getColumnLabels(Long startTime, Long endTime, Integer units) {
         double perUnitSecondLength = (double) (endTime - startTime) / units;
@@ -36,19 +36,26 @@ public class LineGraphUtil {
         return columnLabels;
     }
 
-    public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData, boolean setColor) {
+    public LineGraphData getLineGraphData(String feedId, String routeFriendlyName, List<Double> currData,
+                                          boolean setColor) {
         LineGraphData lineGraphData = new LineGraphData();
         lineGraphData.setLineLabel(routeFriendlyName);
         lineGraphData.setTension(0.0);
         lineGraphData.setData(currData);
         if (setColor) {
-            lineGraphData.setBorderColor(routesService.getColorFor(routeFriendlyName));
+            var optionalColor = gtfsStaticRepository.getColorFor(feedId, routeFriendlyName);
+            lineGraphData.setBorderColor(optionalColor.orElse(null));
         }
         return lineGraphData;
     }
 
-    public void sortByGTFSSortOrder(List<LineGraphData> lineGraphDatas) {
-        lineGraphDatas.sort((o1, o2) -> Integer.compare(routesService.getSortOrderFor(o1.getLineLabel()),
-                routesService.getSortOrderFor(o2.getLineLabel())));
+    public void sortByGTFSSortOrder(String agencyId, List<LineGraphData> lineGraphDatas) {
+        lineGraphDatas.sort((o1, o2) -> {
+            Integer o1Order = gtfsStaticRepository.getSortOrderFor(agencyId, o1.getLineLabel())
+                    .orElse(-1);
+            Integer o2Order = gtfsStaticRepository.getSortOrderFor(agencyId, o2.getLineLabel())
+                    .orElse(-1);
+            return Integer.compare(o1Order, o2Order);
+        });
     }
 }
