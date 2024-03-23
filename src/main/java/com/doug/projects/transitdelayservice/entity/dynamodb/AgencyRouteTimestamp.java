@@ -6,7 +6,6 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -48,11 +47,15 @@ public class AgencyRouteTimestamp {
         return agencyRoute.split(":")[1];
     }
 
+    public static String createKey(String agencyId, String routeName) {
+        return agencyId + ":" + routeName;
+    }
+
     public boolean setAgencyRoute(String agencyId, String routeName) {
         if (StringUtils.contains(agencyId, ":") || StringUtils.contains(routeName, ":")) {
             return false;
         }
-        agencyRoute = agencyId + ":" + routeName;
+        agencyRoute = createKey(agencyId, routeName);
         return true;
     }
 
@@ -67,21 +70,5 @@ public class AgencyRouteTimestamp {
 
     public void setBusStates(List<BusState> busStates) {
         busStatesList = busStates.stream().map(BusState::toString).collect(Collectors.toList());
-    }
-
-    public int getMedianDelaySeconds() {
-        List<BusState> busStates = getBusStatesCopyList();
-        busStates.sort(Comparator.comparing(BusState::getDelay));
-        return busStates.get(busStates.size() / 2).getDelay();
-    }
-
-    public double getPercentOnTime() {
-        List<BusState> busStates = getBusStatesCopyList();
-        return (double) busStates.stream().filter(bs -> bs.getDelay() <= 0).count() / busStates.size();
-    }
-
-    public int getMaxDelaySeconds() {
-        List<BusState> busStates = getBusStatesCopyList();
-        return busStates.stream().map(BusState::getDelay).max(Integer::compare).orElse(0);
     }
 }

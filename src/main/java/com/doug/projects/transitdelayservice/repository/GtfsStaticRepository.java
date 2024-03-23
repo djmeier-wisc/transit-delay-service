@@ -4,20 +4,23 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
+import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
 
@@ -130,6 +133,7 @@ public class GtfsStaticRepository {
     }
 
     public Optional<String> getRouteNameByRoute(String agencyId, String routeId) {
+        if (StringUtils.isBlank(agencyId) || StringUtils.isBlank(routeId)) return Optional.empty();
         QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
                 k.partitionValue(routeId).sortValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
         QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
@@ -144,6 +148,35 @@ public class GtfsStaticRepository {
                 .block();
         if (result == null || result.isEmpty()) return Optional.empty();
         return Optional.of(result.get(0));
+    }
+
+    public Map<String, String> mapRouteIdsToRouteName(String agencyId, List<String> routeIds) {
+        if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(routeIds)) return Collections.emptyMap();
+        List<String> uniqueRouteIds = routeIds.stream().distinct().toList();
+        return DynamoUtils.chunkList(uniqueRouteIds, 100).stream().flatMap(chunkList -> {
+            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.ROUTE.getName())).build();
+            return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
+                    .flatMapIterable(p -> p.resultsForTable(table))
+                    .filter(Objects::nonNull)
+                    .toStream();
+        }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
+    }
+
+    public Map<String, String> mapTripIdsToRouteName(String agencyId, List<String> tripIds) {
+        if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(tripIds)) return Collections.emptyMap();
+        List<String> uniqueTripIds = tripIds.stream().distinct().toList();
+        return DynamoUtils.chunkList(uniqueTripIds, 100).stream().flatMap(chunkList -> {
+            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.ROUTE.getName())).build();
+            return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
+                    .flatMapIterable(p -> p.resultsForTable(table))
+                    .filter(Objects::nonNull)
+                    .toStream();
+        }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
+    }
+
+    @NotNull
+    private List<ReadBatch> generateReadBatches(String agencyId, List<String> chunk, String name) {
+        return chunk.stream().map(routeId -> ReadBatch.builder(GtfsStaticData.class).addGetItem(Key.builder().partitionValue(routeId).sortValue(agencyId + ":" + name).build()).mappedTableResource(table).build()).toList();
     }
 
     public Optional<String> getRouteNameByTrip(String agencyId, String tripId) {

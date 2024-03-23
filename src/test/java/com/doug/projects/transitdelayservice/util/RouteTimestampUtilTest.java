@@ -16,7 +16,7 @@ class RouteTimestampUtilTest {
         List<RouteTimestamp> timestampsForRoute =
                 Arrays.asList(createRouteTimestamp(1, 10), createRouteTimestamp(2, 20), createRouteTimestamp(3, 30));
 
-        Double result = RouteTimestampUtil.getMaxDelayForRouteInMinutes(timestampsForRoute);
+        Double result = RouteTimestampUtil.maxDelayInMinutes(timestampsForRoute);
 
         assertEquals(2, result);
     }

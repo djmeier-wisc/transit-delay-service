@@ -1,6 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.AgencyGtfsWriteStatus;
+import com.doug.projects.transitdelayservice.entity.AgencyStaticStatus;
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.entity.gtfs.csv.RoutesAttributes;
 import com.doug.projects.transitdelayservice.entity.gtfs.csv.StopAttributes;
@@ -67,7 +68,7 @@ public class GtfsStaticParserService {
      * Create a staticData object, getting routeName from routeIdToServiceNameMap. Populates tripIdToServiceNameMap based on contents of routeIdToServiceNameMap.
      *
      * @param tripAttributes   the trip.txt row to populate staticData based on
-     * @param agencyId
+     * @param agencyId         the agencyId we are pulling data from, used to generate id
      * @param routeIdToNameMap unmodified, used to get route name based on route id
      * @param tripIdToNameMap  modified, put tripId and respective routeName gathered from routeIdToNameMap
      * @return
@@ -97,23 +98,22 @@ public class GtfsStaticParserService {
     /**
      * Writes gtfs static data as .csv files to disk under /files.
      *
-     * @param staticUrl      the url to download the gtfs zip from
-     * @param feedId         the feedId to use when writing the file to disk
+     * @param feed the feed to download gtfs static data from
      * @param timeoutSeconds the number of seconds until timeout. In the event of failure,
-     * @return AgencyGtfsWriteStatus w/ success false if timeout or IO exception, success of true otherwise.
+     * @return AgencyStaticStatus w/ success false if timeout or IO exception, success of true otherwise.
      * @implNote this may need to be forcibly timed out. some providers never return data, leading to thread starvation
      */
-    public CompletableFuture<AgencyGtfsWriteStatus> writeGtfsRoutesToDiskAsync(String staticUrl, String feedId, int timeoutSeconds) {
-        var timeOutErr = AgencyGtfsWriteStatus.builder().success(false).message("Timeout").feedId(feedId).build();
+    public CompletableFuture<AgencyStaticStatus> writeGtfsRoutesToDiskAsync(AgencyFeed feed, int timeoutSeconds) {
+        var timeOutErr = AgencyStaticStatus.builder().success(false).message("Timeout").feed(feed).build();
         return CompletableFuture.supplyAsync(() -> {
             try {
-                if (!writeGtfsRoutesToDiskSync(staticUrl, feedId)) {
-                    return AgencyGtfsWriteStatus.builder().message("Failed to write to disk").success(false).feedId(feedId).build();
+                if (!writeGtfsRoutesToDiskSync(feed.getStaticUrl(), feed.getId())) {
+                    return AgencyStaticStatus.builder().message("Failed to write to disk").success(false).feed(feed).build();
                 }
             } catch (IOException e) {
-                return AgencyGtfsWriteStatus.builder().message(e.getMessage()).success(false).feedId(feedId).build();
+                return AgencyStaticStatus.builder().message(e.getMessage()).success(false).feed(feed).build();
             }
-            return AgencyGtfsWriteStatus.builder().message("Success-ish :)").success(true).feedId(feedId).build();
+            return AgencyStaticStatus.builder().message("Success-ish :)").success(true).feed(feed).build();
         }).completeOnTimeout(timeOutErr, timeoutSeconds, TimeUnit.SECONDS);
     }
 
@@ -130,12 +130,12 @@ public class GtfsStaticParserService {
      */
     private boolean writeGtfsRoutesToDiskSync(String staticUrl, String feedId) throws IOException {
         var conn = ((HttpURLConnection) new URL(staticUrl).openConnection());
-        if (conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM || conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP) {
+        if (conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM || conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP || conn.getResponseCode() == 308) {
             log.info("Redirected id \"{}\" to \"{}\"", feedId, staticUrl);
             //call with new url, don't write the old one.
             return writeGtfsRoutesToDiskSync(conn.getHeaderField("Location"), feedId);
         } else if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
-            log.error("Failed to download static data from \"{}\", resCode \"\"", staticUrl);
+            log.error("Failed to download static data from \"{}\", resCode \"{}\"", staticUrl, conn.getResponseCode());
             return false;
         }
         try (BufferedInputStream agencyGtfsZipStream = new BufferedInputStream(new URL(staticUrl).openStream())) {
@@ -151,13 +151,8 @@ public class GtfsStaticParserService {
         }
     }
 
-
-    public CompletableFuture<Void> writeGtfsStaticDataToDynamoFromDiskAsync(AgencyGtfsWriteStatus status) {
-        return CompletableFuture.supplyAsync(() -> writeGtfsStaticDataToDynamoFromDiskSync(status.getFeedId()));
-    }
-
-    @Nullable
-    public Void writeGtfsStaticDataToDynamoFromDiskSync(String agencyId) {
+    public void writeGtfsStaticDataToDynamoFromDiskSync(AgencyFeed feed) {
+        var agencyId = feed.getId();
         if (agencyId == null) {
             log.error("Agency id null!");
         }
@@ -187,17 +182,15 @@ public class GtfsStaticParserService {
         }
         new File("files" + File.separator + agencyId).delete();
         log.info("All file read finished for id: {}", agencyId);
-        return null;
     }
 
     /**
-     * Generic converter to read data from a single file (routes.txt, trips.txt, etc) from file and write to dynamo.
+     * Generic converter to read data from a single file (routes.txt, trips.txt, etc.) from file and write to dynamo.
      *
      * @param agencyId the agencyId to write to dynamo from
      * @param file     the file to read from
      * @param clazz    instance of T
      * @param <T>      an Attributes class used to map against .csv file passed in. Should be
-     * @throws IOException if we fail to read any file needed by TRIPs
      */
     private <T> void readGtfsAndSaveToDb(String agencyId, File file, Class<T> clazz,
                                          Map<String, String> routeIdToNameMap,

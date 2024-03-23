@@ -3,9 +3,9 @@ package com.doug.projects.transitdelayservice.service;
 import com.doug.projects.transitdelayservice.entity.GraphOptions;
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
-import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
-import com.doug.projects.transitdelayservice.repository.RouteTimestampRepository;
 import com.doug.projects.transitdelayservice.util.LineGraphUtil;
 import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
@@ -25,7 +25,7 @@ import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumn
 @RequiredArgsConstructor
 @Slf4j
 public class GetDelayService {
-    private final RouteTimestampRepository repository;
+    private final AgencyRouteTimestampRepository repository;
     private final GtfsStaticRepository gtfsStaticRepository;
     private final LineGraphUtil lineGraphUtil;
 
@@ -40,8 +40,8 @@ public class GetDelayService {
      * less than a day). Delay over the period is averaged to the thousandths decimal place.
      * @throws IllegalArgumentException if startTime is >= endTime
      */
-    public LineGraphDataResponse getAverageDelay(GraphOptions graphOptions) throws IllegalArgumentException {
-        return genericLineGraphConverter(graphOptions, RouteTimestampUtil::getAverageDelayDataForRouteInMinutes);
+    public LineGraphDataResponse getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::medianDelayInMinutes);
     }
 
 
@@ -55,13 +55,13 @@ public class GetDelayService {
      * less than a day). Delay over the period is averaged to the thousandths decimal place.
      * @throws IllegalArgumentException if startTime is >= endTime
      */
-    public LineGraphDataResponse getMaxDelayFor(GraphOptions graphOptions) throws IllegalArgumentException {
+    public LineGraphDataResponse getMaxDelayFor(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
         //validations, if not set default
-        return genericLineGraphConverter(graphOptions, RouteTimestampUtil::getMaxDelayForRouteInMinutes);
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::maxDelayInMinutes);
     }
 
-    public LineGraphDataResponse getPercentOnTimeFor(GraphOptions graphOptions, Integer lower, Integer upper) {
-        return genericLineGraphConverter(graphOptions, ((routeTimestampList) -> RouteTimestampUtil.percentOnTime(routeTimestampList, lower, upper)));
+    public LineGraphDataResponse getPercentOnTimeFor(String feedId, GraphOptions graphOptions, Integer lower, Integer upper) {
+        return genericLineGraphConverter(feedId, graphOptions, ((routeTimestampList) -> RouteTimestampUtil.percentOnTime(routeTimestampList, lower, upper)));
     }
 
     /**
@@ -71,48 +71,44 @@ public class GetDelayService {
      * @param converter the function run for after gathering all routeTimestamps.
      * @return a graph, beginning at startTime, ending at endTime, over the number of units
      */
-    private LineGraphDataResponse genericLineGraphConverter(GraphOptions graphOptions, RouteTimestampConverter converter) {
+    private LineGraphDataResponse genericLineGraphConverter(String feedId, GraphOptions graphOptions, RouteTimestampConverter converter) {
         final long finalStartTime = graphOptions.getStartTime() == null ? TransitDateUtil.getMidnightSixDaysAgo() : graphOptions.getStartTime();
         final long finalEndTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
         final int finalUnits = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
-        final String agencyId = graphOptions.getAgencyId() == null ? "394" : graphOptions.getAgencyId(); //default to calling metro transit
-        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(graphOptions.getAgencyId()) : graphOptions.getRoutes();
+        final String finalFeedId = feedId == null ? "394" : feedId; //default to calling metro transit
+        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(feedId) : graphOptions.getRoutes();
         final boolean finalUseColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
         if (finalStartTime >= finalEndTime)
             throw new IllegalArgumentException("startTime must be greater than endTime");
 
 
-        var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes);
+        var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes, feedId);
         List<LineGraphData> lineGraphDataList = routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
-            List<RouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
+            List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
             if (timestampsForRoute == null) {
                 timestampsForRoute = Collections.emptyList();
             }
             List<Double> currData = new ArrayList<>(finalUnits * 2);
-            try {
-                double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
-                int lastIndexUsed = 0;
-                for (int currUnit = 0; currUnit < finalUnits; currUnit++) {
-                    final long finalCurrEndTime = (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
-                    int currLastIndex = timestampsForRoute.size();
-                    for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                        if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                            currLastIndex = i;
-                            break;
-                        }
+            double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
+            int lastIndexUsed = 0;
+            for (int currUnit = 0; currUnit < finalUnits; currUnit++) {
+                final long finalCurrEndTime = (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
+                int currLastIndex = timestampsForRoute.size();
+                for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
+                    if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                        currLastIndex = i;
+                        break;
                     }
-                    Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                    currData.add(converterResult);
-                    //get ready for next iteration
-                    lastIndexUsed = currLastIndex;
                 }
-            } catch (Exception e) {
-                log.error("Failed to create for friendlyName: {}", routeFriendlyName, e);
+                Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
+                currData.add(converterResult);
+                //get ready for next iteration
+                lastIndexUsed = currLastIndex;
             }
-            return lineGraphUtil.getLineGraphData(graphOptions.getAgencyId(), routeFriendlyName.getKey(), currData,
+            return lineGraphUtil.getLineGraphData(feedId, routeFriendlyName.getKey(), currData,
                     finalUseColor);
         }).collect(Collectors.toList());
-        lineGraphUtil.sortByGTFSSortOrder(agencyId, lineGraphDataList);
+        lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
 
         LineGraphDataResponse response = new LineGraphDataResponse();
         response.setDatasets(lineGraphDataList);

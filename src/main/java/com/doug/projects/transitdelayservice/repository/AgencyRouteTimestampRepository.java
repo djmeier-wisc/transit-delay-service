@@ -4,17 +4,25 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestam
 import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
+import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
-import software.amazon.awssdk.enhanced.dynamodb.model.BatchWriteItemEnhancedRequest;
-import software.amazon.awssdk.enhanced.dynamodb.model.BatchWriteResult;
-import software.amazon.awssdk.enhanced.dynamodb.model.WriteBatch;
+import software.amazon.awssdk.enhanced.dynamodb.model.*;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
+
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp.createKey;
 
 @Repository
 @Slf4j
@@ -82,5 +90,38 @@ public class AgencyRouteTimestampRepository {
             log.error("Unprocessed items: {}", r.unprocessedPutItemsForTable(table));
             asyncBatchWrite(r.unprocessedPutItemsForTable(table)).join();
         }
+    }
+
+    /**
+     * Creates a collector that groups by agencyRoute and then sorts by timestamp.
+     *
+     * @return a map from routeName to
+     */
+    @NotNull
+    private static Collector<AgencyRouteTimestamp, ?, Map<String, List<AgencyRouteTimestamp>>> groupByRouteNameAndSortByTimestamp() {
+        return Collectors.groupingBy(AgencyRouteTimestamp::getRouteName,
+                Collectors.collectingAndThen(Collectors.toList(), list -> {
+                    list.sort(Comparator.comparing(AgencyRouteTimestamp::getTimestamp));
+                    return list;
+                }));
+    }
+
+    public Map<String, List<AgencyRouteTimestamp>> getRouteTimestampsMapBy(long startTime, long endTime, List<String> routeNames, String feedId) {
+        List<SdkPublisher<AgencyRouteTimestamp>> routeStream = routeNames.stream().map(routeName -> {
+            Key lowerBound = Key.builder()
+                    .partitionValue(createKey(feedId, routeName))
+                    .sortValue(startTime)
+                    .build();
+            Key upperBound = Key.builder()
+                    .partitionValue(createKey(feedId, routeName))
+                    .sortValue(endTime)
+                    .build();
+            QueryConditional query = QueryConditional.sortBetween(lowerBound, upperBound);
+            QueryEnhancedRequest request = QueryEnhancedRequest.builder().queryConditional(query).build();
+            return table.query(request).items();
+        }).toList();
+        return Flux.merge(routeStream)
+                .collect(groupByRouteNameAndSortByTimestamp())
+                .block();
     }
 }

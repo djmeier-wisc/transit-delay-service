@@ -32,6 +32,11 @@ public class AgencyFeedRepository {
         });
     }
 
+    public void removeAgencyFeeds(List<AgencyFeed> agencyFeedList) {
+        DynamoDbTable<AgencyFeed> table = enhancedClient.table("agencyFeeds", TableSchema.fromBean(AgencyFeed.class));
+        agencyFeedList.parallelStream().forEach(table::deleteItem);
+    }
+
     public List<AgencyFeed> getACTStatusAgencyFeeds() {
         DynamoDbTable<AgencyFeed> table = enhancedClient.table("agencyFeeds", TableSchema.fromBean(AgencyFeed.class));
         return table.query(q ->

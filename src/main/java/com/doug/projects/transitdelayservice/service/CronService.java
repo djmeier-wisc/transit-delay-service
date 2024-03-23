@@ -21,6 +21,7 @@ public class CronService {
     private final GtfsFeedAggregator gtfsFeedAggregator;
     private final GtfsRealtimeParserService rtResponseService;
     private final AgencyRouteTimestampRepository routeTimestampRepository;
+    private final GtfsRetryOnFailureService retryOnFailureService;
     @Value("${doesCronRun}")
     private Boolean doesCronRun;
 
@@ -49,11 +50,11 @@ public class CronService {
         log.info("Starting static data write");
         agencyFeedRepository.getACTStatusAgencyFeeds()
                 .forEach(feed -> staticService
-                        .writeGtfsRoutesToDiskAsync(feed.getStaticUrl(), feed.getId(), 60)
+                        .writeGtfsRoutesToDiskAsync(feed, 60)
                         //set timeout to avoid thread starvation, unreliable urls
-                        .thenAcceptAsync((s) -> {
+                        .thenAccept((s) -> {
                             if (s.isSuccess())
-                                staticService.writeGtfsStaticDataToDynamoFromDiskSync(s.getFeedId());
+                                staticService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
                             //TODO failure case...
                         }).join()
                 );
@@ -67,15 +68,18 @@ public class CronService {
     @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     @Async
     public void writeGtfsRealtimeData() {
-        if (!doesCronRun)
-            return;
+//        if (!doesCronRun)
+//            return;
         log.info("Starting realtime data write");
-        agencyFeedRepository.getACTStatusAgencyFeeds()
-                .stream().map(feed -> //TODO failure case...
-                        rtResponseService.convertFromAsync(feed.getId(), feed.getRealTimeUrl())
-                                //set timeout to avoid thread starvation, unreliable urls
-                                .thenAcceptAsync(routeTimestampRepository::saveAll)
-                ).reduce(CompletableFuture::allOf).get().join();
+        CompletableFuture[] allFutures =
+                agencyFeedRepository.getACTStatusAgencyFeeds()
+                        .stream().map(feed ->
+                                rtResponseService.convertFromAsync(feed, 15)
+                                        .thenApply(retryOnFailureService::reCheckFailures)
+                                        .thenAccept(routeTimestampRepository::saveAll)
+                        ).toArray(size -> new CompletableFuture[size]);
+        CompletableFuture.allOf(allFutures).join();
+
         log.info("Finished realtime data write");
     }
 }
