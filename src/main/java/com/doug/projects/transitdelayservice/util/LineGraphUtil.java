@@ -4,6 +4,7 @@ import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 
 import java.text.SimpleDateFormat;
 import java.time.ZoneId;
@@ -36,7 +37,7 @@ public class LineGraphUtil {
         return columnLabels;
     }
 
-    public LineGraphData getLineGraphData(String feedId, String routeFriendlyName, List<Double> currData,
+    public LineGraphData getLineGraphData(String feedId, String routeFriendlyName, Flux<Double> currData,
                                           boolean setColor) {
         LineGraphData lineGraphData = new LineGraphData();
         lineGraphData.setLineLabel(routeFriendlyName);
@@ -49,7 +50,7 @@ public class LineGraphUtil {
         return lineGraphData;
     }
 
-    public void sortByGTFSSortOrder(String agencyId, List<LineGraphData> lineGraphDatas) {
+    public void sortByGTFSSortOrder(String agencyId, Flux<LineGraphData> lineGraphDatas) {
         lineGraphDatas.sort((o1, o2) -> {
             Integer o1Order = gtfsStaticRepository.getSortOrderFor(agencyId, o1.getLineLabel())
                     .orElse(-1);

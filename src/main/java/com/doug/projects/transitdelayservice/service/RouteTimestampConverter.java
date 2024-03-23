@@ -1,9 +1,8 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-
-import java.util.List;
+import reactor.core.publisher.Flux;
 
 public interface RouteTimestampConverter {
-    Double convert(List<AgencyRouteTimestamp> routeTimestampList);
+    Double convert(Flux<AgencyRouteTimestamp> routeTimestampList);
 }

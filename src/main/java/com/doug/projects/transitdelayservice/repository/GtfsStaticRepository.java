@@ -62,11 +62,11 @@ public class GtfsStaticRepository {
      * @param data the data to save
      */
     private void parallelSaveAll(List<GtfsStaticData> data) {
-        DynamoUtils.chunkList(data, 25)
+        CompletableFuture[] result = DynamoUtils.chunkList(data, 25)
                 .stream()
                 .map(this::asyncBatchWrite)
-                .reduce(CompletableFuture::allOf)
-                .orElse(CompletableFuture.failedFuture(new RuntimeException("Failed to write all items to dynamoDB")))
+                .toArray(CompletableFuture[]::new);
+        CompletableFuture.allOf(result)
                 .join();
     }
 

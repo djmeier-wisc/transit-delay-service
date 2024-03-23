@@ -1,5 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,8 +27,18 @@ public class CronService {
     @Value("${doesCronRun}")
     private Boolean doesCronRun;
 
-    //@Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
+    private static AgencyRouteTimestamp convert(RouteTimestamp data) {
+        AgencyRouteTimestamp result = new AgencyRouteTimestamp();
+        result.setTimestamp(data.getTimestamp());
+        result.setBusStatesList(data.getBusStatesList());
+        result.setAgencyRoute("394", data.getRoute());
+        return result;
+    }
+
+    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
     public void writeFeeds() {
+        if (!doesCronRun)
+            return;
         try {
             log.info("Gathering Feeds...");
             var feeds = gtfsFeedAggregator.gatherRTFeeds();
@@ -42,8 +54,8 @@ public class CronService {
      * Writes all ACT agency's data to DynamoDb for processing.
      * Done asynchronously to avoid blocking scheduler thread.
      */
-    @Scheduled(fixedRate = 7, timeUnit = TimeUnit.DAYS)
-    @Async
+    //    @Scheduled(fixedRate = 7, timeUnit = TimeUnit.DAYS)
+    //    @Async
     public void writeGtfsStaticData() {
         if (!doesCronRun)
             return;
@@ -68,16 +80,16 @@ public class CronService {
     @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     @Async
     public void writeGtfsRealtimeData() {
-//        if (!doesCronRun)
-//            return;
+        if (!doesCronRun)
+            return;
         log.info("Starting realtime data write");
-        CompletableFuture[] allFutures =
+        CompletableFuture<?>[] allFutures =
                 agencyFeedRepository.getACTStatusAgencyFeeds()
-                        .stream().map(feed ->
-                                rtResponseService.convertFromAsync(feed, 15)
+                        .stream().map(feed -> rtResponseService.convertFromAsync(feed, 60)
                                         .thenApply(retryOnFailureService::reCheckFailures)
-                                        .thenAccept(routeTimestampRepository::saveAll)
-                        ).toArray(size -> new CompletableFuture[size]);
+                                        .thenAccept(routeTimestampRepository::saveAll))
+                        .toArray(CompletableFuture[]::new);
+
         CompletableFuture.allOf(allFutures).join();
 
         log.info("Finished realtime data write");

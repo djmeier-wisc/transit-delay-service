@@ -13,11 +13,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.GroupedFlux;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
 
@@ -41,7 +41,7 @@ public class GetDelayService {
      * @throws IllegalArgumentException if startTime is >= endTime
      */
     public LineGraphDataResponse getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
-        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::medianDelayInMinutes);
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::averageDelayMinutes);
     }
 
 
@@ -83,31 +83,15 @@ public class GetDelayService {
 
 
         var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes, feedId);
-        List<LineGraphData> lineGraphDataList = routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
-            List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
-            if (timestampsForRoute == null) {
-                timestampsForRoute = Collections.emptyList();
-            }
-            List<Double> currData = new ArrayList<>(finalUnits * 2);
-            double perUnitSecondLength = (double) (finalEndTime - finalStartTime) / finalUnits;
-            int lastIndexUsed = 0;
-            for (int currUnit = 0; currUnit < finalUnits; currUnit++) {
-                final long finalCurrEndTime = (long) (finalStartTime + (perUnitSecondLength * (currUnit + 1)));
-                int currLastIndex = timestampsForRoute.size();
-                for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                    if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                        currLastIndex = i;
-                        break;
-                    }
-                }
-                Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                currData.add(converterResult);
-                //get ready for next iteration
-                lastIndexUsed = currLastIndex;
-            }
-            return lineGraphUtil.getLineGraphData(feedId, routeFriendlyName.getKey(), currData,
+        Flux<LineGraphData> lineGraphDataList = routeTimestampsMap.map(routeFriendlyName -> {
+            Flux<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName;
+            Flux<Double> currData = timestampsForRoute.groupBy(t -> (t.getTimestamp() - finalStartTime) /
+                            (finalEndTime - finalStartTime))
+                    .sort(Comparator.comparing(GroupedFlux::key))
+                    .map(converter::convert);
+            return lineGraphUtil.getLineGraphData(feedId, routeFriendlyName.key(), currData,
                     finalUseColor);
-        }).collect(Collectors.toList());
+        });
         lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
 
         LineGraphDataResponse response = new LineGraphDataResponse();

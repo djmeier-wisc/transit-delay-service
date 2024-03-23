@@ -2,11 +2,12 @@ package com.doug.projects.transitdelayservice.repository;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.util.DynamoUtils;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.GroupedFlux;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
@@ -45,11 +46,11 @@ public class AgencyRouteTimestampRepository {
      * @param data the data to save
      */
     public void saveAll(List<AgencyRouteTimestamp> data) {
-        DynamoUtils.chunkList(data, 25)
+        var result = DynamoUtils.chunkList(data, 25)
                 .stream()
                 .map(this::asyncBatchWrite)
-                .reduce(CompletableFuture::allOf)
-                .orElse(CompletableFuture.failedFuture(new RuntimeException("Failed to write all items to dynamoDB")))
+                .toArray(CompletableFuture[]::new);
+        CompletableFuture.allOf(result)
                 .join();
     }
 
@@ -60,12 +61,15 @@ public class AgencyRouteTimestampRepository {
      * @return
      */
     private CompletableFuture<Void> asyncBatchWrite(List<AgencyRouteTimestamp> chunkedList) {
+        if (CollectionUtils.isEmpty(chunkedList)) {
+            return CompletableFuture.completedFuture(null);
+        }
         return asyncEnhancedClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
                 //if the write takes longer than 10 seconds, we get an exception that kills the whole process
                 //we add a cutoff here that tries to prevent that exception.
                 //if writing just 25 items takes over 10 seconds, the partition might be overloaded
                 .completeOnTimeout(null, 9500, TimeUnit.MILLISECONDS)
-                .thenAccept(r -> retryUnprocessed(chunkedList, r));
+                .thenAcceptAsync(r -> retryUnprocessed(chunkedList, r));
     }
 
     private void addBatchWrites(List<AgencyRouteTimestamp> chunkedList, BatchWriteItemEnhancedRequest.Builder b) {
@@ -77,18 +81,15 @@ public class AgencyRouteTimestampRepository {
         }
     }
 
-    @SneakyThrows(InterruptedException.class)
     private void retryUnprocessed(List<AgencyRouteTimestamp> data, BatchWriteResult r) {
         if (r == null) {
             log.error("Timeout writing to dynamoDB. Retrying...");
-            Thread.sleep(5000);
             asyncBatchWrite(data).join();
-            return;
-        }
-        if (!r.unprocessedPutItemsForTable(table)
+        } else if (!r.unprocessedPutItemsForTable(table)
                 .isEmpty()) {
             log.error("Unprocessed items: {}", r.unprocessedPutItemsForTable(table));
             asyncBatchWrite(r.unprocessedPutItemsForTable(table)).join();
+            log.info("Finished processing unprocessed items!");
         }
     }
 
@@ -106,7 +107,9 @@ public class AgencyRouteTimestampRepository {
                 }));
     }
 
-    public Map<String, List<AgencyRouteTimestamp>> getRouteTimestampsMapBy(long startTime, long endTime, List<String> routeNames, String feedId) {
+    public Flux<GroupedFlux<String, AgencyRouteTimestamp>> getRouteTimestampsMapBy(long startTime, long endTime,
+                                                                                   List<String> routeNames,
+                                                                                   String feedId) {
         List<SdkPublisher<AgencyRouteTimestamp>> routeStream = routeNames.stream().map(routeName -> {
             Key lowerBound = Key.builder()
                     .partitionValue(createKey(feedId, routeName))
@@ -121,7 +124,6 @@ public class AgencyRouteTimestampRepository {
             return table.query(request).items();
         }).toList();
         return Flux.merge(routeStream)
-                .collect(groupByRouteNameAndSortByTimestamp())
-                .block();
+                .groupBy(AgencyRouteTimestamp::getRouteName);
     }
 }

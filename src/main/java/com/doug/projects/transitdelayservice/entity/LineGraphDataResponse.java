@@ -3,6 +3,7 @@ package com.doug.projects.transitdelayservice.entity;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -10,6 +11,6 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class LineGraphDataResponse {
-    private List<LineGraphData> datasets;
+    private Flux<LineGraphData> datasets;
     private List<String> labels;
 }

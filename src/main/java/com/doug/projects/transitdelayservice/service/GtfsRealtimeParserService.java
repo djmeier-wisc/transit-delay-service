@@ -111,7 +111,6 @@ public class GtfsRealtimeParserService {
      * Parses the realTime feed from AgencyFeed.
      *
      * @param feed        the feed to try to read from the realtime url
-     * @param realtimeUrl
      * @return an AgencyRealTimeResponse.
      * <p>In the event of failure, status will be set and routeTimestamps field may be null or empty</p>
      */
@@ -130,7 +129,10 @@ public class GtfsRealtimeParserService {
                 return convertFromSync(feed);
             } else if (StringUtils.contains("401", conn.getResponseMessage()) || conn.getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
                 log.error("Connection is unauthorized for feedId: {}", feedId);
-                return AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.UNAUTHORIZED).build();
+                return AgencyRealtimeResponse.builder()
+                        .feedStatus(AgencyFeed.Status.UNAUTHORIZED)
+                        .feed(feed)
+                        .build();
             } else if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
                 log.error("Failed to download realtime data from \"{}\", resCode \"\"", realtimeUrl);
                 return AgencyRealtimeResponse.builder()

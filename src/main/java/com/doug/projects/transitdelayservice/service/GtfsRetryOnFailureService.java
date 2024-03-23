@@ -5,7 +5,6 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -43,7 +42,6 @@ public class GtfsRetryOnFailureService {
      * @param feed
      */
     @Async
-    @SneakyThrows
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
         switch (feedStatus) {
             case ACTIVE -> {
@@ -51,9 +49,9 @@ public class GtfsRetryOnFailureService {
             }
             case UNAUTHORIZED, DELETED, UNAVAILABLE -> {
                 log.error("UPDATING FEED TO UNAVAILABLE/UNAUTH/DELETED");
-                feedRepository.removeAgencyFeeds(List.of(feed));
-                feed.setState(String.valueOf(feedStatus));
-                feedRepository.writeAgencyFeeds(List.of(feed));
+                feedRepository.removeAgencyFeed(feed);
+                feed.setStatus(String.valueOf(feedStatus));
+                feedRepository.writeAgencyFeed(feed);
             }
             case OUTDATED -> {
                 var staticResult = staticParserService.writeGtfsRoutesToDiskAsync(feed, 240).join();
