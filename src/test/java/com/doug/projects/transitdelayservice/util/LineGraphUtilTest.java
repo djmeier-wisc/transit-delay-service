@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
-import com.doug.projects.transitdelayservice.service.RouteMapperService;
+import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -10,6 +10,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -18,7 +19,7 @@ import static org.mockito.Mockito.*;
 class LineGraphUtilTest {
 
     @Mock
-    private RouteMapperService routesService;
+    private GtfsStaticRepository repository;
 
     @InjectMocks
     private LineGraphUtil lineGraphUtil;
@@ -44,49 +45,52 @@ class LineGraphUtilTest {
     @Test
     void testGetLineGraphDataColorTrue() {
         String routeFriendlyName = "TestRoute";
+        String feedId = "TestFeed";
         List<Double> currData = Arrays.asList(1.0, 2.0, 3.0);
 
-        // Mocking the behavior of the routesService
-        when(routesService.getColorFor(routeFriendlyName)).thenReturn("#FFFFFF");
+        // Mocking the behavior of the repository
+        when(repository.getColorFor(feedId, routeFriendlyName)).thenReturn(Optional.of("#FFFFFF"));
 
-        LineGraphData result = lineGraphUtil.getLineGraphData(routeFriendlyName, currData, true);
+        LineGraphData result = lineGraphUtil.getLineGraphData(feedId, routeFriendlyName, currData, true);
 
         assertEquals(routeFriendlyName, result.getLineLabel());
         assertEquals("#FFFFFF", result.getBorderColor());
 
         // Verify that getColorFor was called with the correct argument
-        verify(routesService, times(1)).getColorFor(routeFriendlyName);
+        verify(repository, times(1)).getColorFor(feedId, routeFriendlyName);
     }
 
     @Test
     void testGetLineGraphDataColorFalse() {
         String routeFriendlyName = "TestRoute";
+        String feedId = "TestFeed";
         List<Double> currData = Arrays.asList(1.0, 2.0, 3.0);
 
-        // Mocking the behavior of the routesService
-        when(routesService.getColorFor(routeFriendlyName)).thenReturn("#FFFFFF");
+        // Mocking the behavior of the repository
+        when(repository.getColorFor(feedId, routeFriendlyName)).thenReturn(Optional.of("#FFFFFF"));
 
-        LineGraphData result = lineGraphUtil.getLineGraphData(routeFriendlyName, currData, false);
+        LineGraphData result = lineGraphUtil.getLineGraphData(feedId, routeFriendlyName, currData, false);
 
         assertEquals(routeFriendlyName, result.getLineLabel());
         assertNull(result.getBorderColor()); //should not be passed when false
 
         // Verify that getColorFor was called with the correct argument
-        verify(routesService, times(0)).getColorFor(routeFriendlyName);
+        verify(repository, times(0)).getColorFor(feedId, routeFriendlyName);
     }
 
     @Test
     void testSortByGTFSSortOrder() {
+        String feedId = "TestFeed";
         List<LineGraphData> lineGraphDatas =
                 Arrays.asList(createLineGraphData("Route1"), createLineGraphData("Route3"), createLineGraphData(
                         "Route2"));//out of order, route3 should be 3rd
 
-        // Mocking the behavior of the routesService
-        when(routesService.getSortOrderFor("Route1")).thenReturn(1);
-        when(routesService.getSortOrderFor("Route2")).thenReturn(2);
-        when(routesService.getSortOrderFor("Route3")).thenReturn(3);
+        // Mocking the behavior of the repository
+        when(repository.getSortOrderFor(feedId, "Route1")).thenReturn(Optional.of(1));
+        when(repository.getSortOrderFor(feedId, "Route2")).thenReturn(Optional.of(2));
+        when(repository.getSortOrderFor(feedId, "Route3")).thenReturn(Optional.of(3));
 
-        lineGraphUtil.sortByGTFSSortOrder(lineGraphDatas);
+        lineGraphUtil.sortByGTFSSortOrder(feedId, lineGraphDatas);
 
         // Verify that the sorting is done based on the GTFSSortOrder
         assertEquals("Route1", lineGraphDatas.get(0).getLineLabel());
@@ -94,9 +98,9 @@ class LineGraphUtilTest {
         assertEquals("Route3", lineGraphDatas.get(2).getLineLabel());
 
         // Verify that getSortOrderFor was called for each lineGraphData
-        verify(routesService, atLeast(1)).getSortOrderFor("Route1");
-        verify(routesService, atLeast(1)).getSortOrderFor("Route2");
-        verify(routesService, atLeast(1)).getSortOrderFor("Route3");
+        verify(repository, atLeast(1)).getSortOrderFor(feedId, "Route1");
+        verify(repository, atLeast(1)).getSortOrderFor(feedId, "Route2");
+        verify(repository, atLeast(1)).getSortOrderFor(feedId, "Route3");
     }
 
     private LineGraphData createLineGraphData(String label) {

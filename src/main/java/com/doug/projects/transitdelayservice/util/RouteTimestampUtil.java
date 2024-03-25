@@ -1,87 +1,58 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
-import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
-import org.springframework.util.StringUtils;
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
+import org.jetbrains.annotations.NotNull;
+import org.springframework.util.CollectionUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.OptionalDouble;
 import java.util.OptionalInt;
-
-import static java.lang.Math.abs;
-import static java.lang.Math.floor;
+import java.util.stream.IntStream;
 
 public class RouteTimestampUtil {
-    public static Double getMaxDelayForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {
+    public static Double maxDelayInMinutes(List<AgencyRouteTimestamp> timestampsForRoute) {
 
-        OptionalInt averageDelay =
-                timestampsForRoute.stream().mapToInt(RouteTimestampUtil::getMaxDelayFromBusStatesList).max();
-        if (averageDelay.isEmpty()) {
+        OptionalInt maxDelay =
+                timestampsForRoute.stream().flatMapToInt(RouteTimestampUtil::getDelayStream).max();
+        if (maxDelay.isEmpty()) {
             return null;
         }
-        double timeInMinutes = ((double) averageDelay.getAsInt()) / 60; //convert to minutes
-        return floor(timeInMinutes * 1000) / 1000;
+        return ((double) maxDelay.getAsInt()) / 60;
     }
 
-    public static Double percentOnTime(List<RouteTimestamp> timestampsForRoute, Integer lower, Integer upper) {
+    public static Double percentOnTime(List<AgencyRouteTimestamp> timestampsForRoute, Integer lowerMinutes, Integer upperMinutes) {
 
-        List<Integer> allBusStates = timestampsForRoute.stream()
-                .flatMap(rt -> rt.getBusStatesList().stream().map(RouteTimestampUtil::extractBusStates))
-                .map(BusStates::getDelay).toList();
+        int[] allBusStates = timestampsForRoute.stream()
+                .flatMapToInt(RouteTimestampUtil::getDelayStream)
+                .toArray();
 
         Double percentOnTime =
-                ((double) allBusStates.stream().filter(delay -> delay / 60 >= lower && delay / 50 <= upper).count() /
-                        allBusStates.size()) * 100;
-        if (allBusStates.isEmpty()) {
+                ((double) Arrays.stream(allBusStates).filter(delay -> delay / 60 >= lowerMinutes && delay / 60 <= upperMinutes).count() /
+                        allBusStates.length) * 100;
+        if (allBusStates.length == 0) {
             return null;
         }
         return percentOnTime;
 
     }
 
-    public static Integer getMaxDelayFromBusStatesList(RouteTimestamp rt) {
-        return rt.getBusStatesList().stream().map(bs -> {
-            String[] vals = StringUtils.split(bs, "#");
-            //see BusStatesList.java for code on how these are serialized. There was probably a
-            // better solution, but I didn't figure it out.
-            if (vals.length < 1) {
-                return null;
-            }
-            try {
-                return abs(Integer.parseInt(vals[0]));
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }).filter(Objects::nonNull).max(Integer::compareTo).orElse(-1);
+    @NotNull
+    private static IntStream getDelayStream(AgencyRouteTimestamp rt) {
+        return rt.getBusStatesCopyList().stream().mapToInt(BusState::getDelay);
     }
 
-    /**
-     * Deserializes busStates object from stringToParse.
-     *
-     * @param stringToParse string representation of busStates object. See toString of BusStates
-     * @return busStates object deserialized from stringToParse.
-     */
-    public static BusStates extractBusStates(String stringToParse) {
-        BusStates busStates = new BusStates();
-        String[] vals = stringToParse.split("#");
-        Integer delay = vals.length < 1 ? null : Integer.valueOf(vals[0]);
-        String closestStopId = vals.length < 2 ? null : vals[1];
-        Integer tripId = vals.length < 3 ? null : Integer.valueOf(vals[2]);
-        busStates.setDelay(delay);
-        busStates.setClosestStopId(closestStopId);
-        busStates.setTripId(tripId);
-        return busStates;
-    }
-
-    public static Double getAverageDelayDataForRouteInMinutes(List<RouteTimestamp> timestampsForRoute) {
-
-        OptionalDouble averageDelay =
-                timestampsForRoute.stream().mapToDouble(RouteTimestamp::getAverageDelay).average();
-        if (averageDelay.isEmpty()) {
+    public static Double medianDelayInMinutes(List<AgencyRouteTimestamp> routeTimestampList) {
+        if (CollectionUtils.isEmpty(routeTimestampList)) return null;
+        int[] sortedDelayList = routeTimestampList.stream()
+                .flatMapToInt(RouteTimestampUtil::getDelayStream)
+                .filter(Objects::nonNull)
+                .sorted() //sort by delay to get median
+                .toArray();
+        if (sortedDelayList.length == 0) {
             return null;
         }
-        double timeInMinutes = averageDelay.getAsDouble() / 60; //convert to minutes
-        return floor(timeInMinutes * 1000) / 1000;
+        return (double) (sortedDelayList[sortedDelayList.length / 2] / 60);
     }
 }
