@@ -4,7 +4,6 @@ import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Flux;
 
 import java.text.SimpleDateFormat;
 import java.time.ZoneId;
@@ -37,26 +36,27 @@ public class LineGraphUtil {
         return columnLabels;
     }
 
-    public LineGraphData getLineGraphData(String feedId, String routeFriendlyName, Flux<Double> currData,
-                                          boolean setColor) {
+    public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData) {
         LineGraphData lineGraphData = new LineGraphData();
         lineGraphData.setLineLabel(routeFriendlyName);
         lineGraphData.setTension(0.0);
         lineGraphData.setData(currData);
-        if (setColor) {
-            var optionalColor = gtfsStaticRepository.getColorFor(feedId, routeFriendlyName);
-            lineGraphData.setBorderColor(optionalColor.orElse(null));
-        }
         return lineGraphData;
     }
 
-    public void sortByGTFSSortOrder(String agencyId, Flux<LineGraphData> lineGraphDatas) {
+    public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDatas) {
+        var sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId).join();
         lineGraphDatas.sort((o1, o2) -> {
-            Integer o1Order = gtfsStaticRepository.getSortOrderFor(agencyId, o1.getLineLabel())
-                    .orElse(-1);
-            Integer o2Order = gtfsStaticRepository.getSortOrderFor(agencyId, o2.getLineLabel())
-                    .orElse(-1);
+            Integer o1Order = sortOrderMap.getOrDefault(o1.getLineLabel(), -1);
+            Integer o2Order = sortOrderMap.getOrDefault(o2.getLineLabel(), -1);
             return Integer.compare(o1Order, o2Order);
+        });
+    }
+
+    public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {
+        var colorMap = gtfsStaticRepository.getRouteNameToColorMap(feedId).join();
+        lineGraphDataList.forEach(lineGraphData -> {
+            lineGraphData.setBorderColor(colorMap.get(lineGraphData.getLineLabel()));
         });
     }
 }

@@ -23,7 +23,7 @@ public class CRUDController {
     @GetMapping("/v1/getAllRouteNames")
     @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
     public ResponseEntity<List<String>> getAllRoutes(@RequestParam(defaultValue = "394") @Parameter(description = "Agency ID, defaulting to 394/Metro Transit Madison") final String agencyId) {
-        return ResponseEntity.ok(staticRepository.findAllRouteNames(agencyId));
+        return ResponseEntity.ok(staticRepository.findAllRouteNames(agencyId).join());
     }
 
     @GetMapping("/v1/getAllAgencies")

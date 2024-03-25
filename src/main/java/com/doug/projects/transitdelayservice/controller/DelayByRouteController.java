@@ -17,19 +17,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class DelayByRouteController {
     private final GetDelayService getDelayService;
     @Value("${metro.feedId}")
-    private String metroFeedId;
+    private String metroMadisonFeedId;
     @GetMapping("/v1/average/allLines")
     public ResponseEntity<LineGraphDataResponse> getDelayByAllLines(GraphOptions graphOptions) {
-        return ResponseEntity.ok(getDelayService.getAverageDelay(metroFeedId, graphOptions));
+        return ResponseEntity.ok(getDelayService.getAverageDelay(metroMadisonFeedId, graphOptions));
     }
 
     @GetMapping("/v1/max/allLines")
     public ResponseEntity<LineGraphDataResponse> getAverageDelayByAllLines(GraphOptions graphOptions) {
-        return ResponseEntity.ok(getDelayService.getMaxDelayFor(metroFeedId, graphOptions));
+        return ResponseEntity.ok(getDelayService.getMaxDelayFor(metroMadisonFeedId, graphOptions));
     }
 
     @GetMapping("/v1/percent/allLines")
     public ResponseEntity<LineGraphDataResponse> getPercentDelayByAllLines(GraphOptions graphOptions, @RequestParam(defaultValue = "-5") Integer lowerOnTimeThreshold, @RequestParam(defaultValue = "5") Integer upperOnTimeThreshold) {
-        return ResponseEntity.ok(getDelayService.getPercentOnTimeFor(metroFeedId, graphOptions, lowerOnTimeThreshold, upperOnTimeThreshold));
+        return ResponseEntity.ok(getDelayService.getPercentOnTimeFor(metroMadisonFeedId, graphOptions, lowerOnTimeThreshold, upperOnTimeThreshold));
     }
 }

@@ -7,7 +7,6 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.GroupedFlux;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
@@ -107,9 +106,7 @@ public class AgencyRouteTimestampRepository {
                 }));
     }
 
-    public Flux<GroupedFlux<String, AgencyRouteTimestamp>> getRouteTimestampsMapBy(long startTime, long endTime,
-                                                                                   List<String> routeNames,
-                                                                                   String feedId) {
+    public CompletableFuture<Map<String, List<AgencyRouteTimestamp>>> getRouteTimestampsMapBy(long startTime, long endTime, List<String> routeNames, String feedId) {
         List<SdkPublisher<AgencyRouteTimestamp>> routeStream = routeNames.stream().map(routeName -> {
             Key lowerBound = Key.builder()
                     .partitionValue(createKey(feedId, routeName))
@@ -124,6 +121,7 @@ public class AgencyRouteTimestampRepository {
             return table.query(request).items();
         }).toList();
         return Flux.merge(routeStream)
-                .groupBy(AgencyRouteTimestamp::getRouteName);
+                .collect(groupByRouteNameAndSortByTimestamp())
+                .toFuture();
     }
 }

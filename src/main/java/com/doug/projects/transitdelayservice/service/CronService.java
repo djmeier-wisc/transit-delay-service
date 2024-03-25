@@ -77,11 +77,11 @@ public class CronService {
      * Writes all ACT agency's data to DynamoDb for processing.
      * Done asynchronously to avoid blocking scheduler thread.
      */
-    @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedDelay = 5, timeUnit = TimeUnit.MINUTES)
     @Async
     public void writeGtfsRealtimeData() {
-        if (!doesCronRun)
-            return;
+//        if (!doesCronRun)
+//            return;
         log.info("Starting realtime data write");
         CompletableFuture<?>[] allFutures =
                 agencyFeedRepository.getACTStatusAgencyFeeds()

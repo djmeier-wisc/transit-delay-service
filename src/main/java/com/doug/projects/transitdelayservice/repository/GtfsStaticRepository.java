@@ -105,20 +105,11 @@ public class GtfsStaticRepository {
         }
     }
 
-    /**
-     * Finds all route names for a particular agencyId.
-     * Note that this can either be routeShortName or routeLongName, depending on which was specified in routes.txt file.
-     *
-     * @param agencyId the agencyId to search the DB for
-     * @return the routeNames associated with that agency.
-     */
-    public List<String> findAllRouteNames(String agencyId) {
+    public CompletableFuture<List<GtfsStaticData>> findAllRoutes(String agencyId) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
-                k.partitionValue(agencyId + GtfsStaticData.TYPE.ROUTE.getName()));
+                k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
         QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
                 .queryConditional(queryConditional)
-                .addAttributeToProject("routeName")
-                .addAttributeToProject("routeSortOrder")
                 .build();
         SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table.index(AGENCY_TYPE_INDEX)
                 .query(queryEnhancedRequest);
@@ -126,28 +117,20 @@ public class GtfsStaticRepository {
         return Flux.concat(sdkPublisher)
                 .flatMapIterable(Page::items)
                 .sort(Comparator.comparing(GtfsStaticData::getRouteSortOrder))
-                .map(GtfsStaticData::getRouteName)
                 .distinct()
                 .collectList()
-                .block();
+                .toFuture();
     }
 
-    public Optional<String> getRouteNameByRoute(String agencyId, String routeId) {
-        if (StringUtils.isBlank(agencyId) || StringUtils.isBlank(routeId)) return Optional.empty();
-        QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
-                k.partitionValue(routeId).sortValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
-        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
-                .queryConditional(queryConditional)
-                .build();
-        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table
-                .query(queryEnhancedRequest);
-        List<String> result = Flux.concat(sdkPublisher)
-                .flatMapIterable(Page::items)
-                .map(GtfsStaticData::getRouteName)
-                .collectList()
-                .block();
-        if (result == null || result.isEmpty()) return Optional.empty();
-        return Optional.of(result.get(0));
+    /**
+     * Finds all route names for a particular agencyId.
+     * Note that this can either be routeShortName or routeLongName, depending on which was specified in routes.txt file.
+     *
+     * @param agencyId the agencyId to search the DB for
+     * @return the routeNames associated with that agency.
+     */
+    public CompletableFuture<List<String>> findAllRouteNames(String agencyId) {
+        return this.findAllRoutes(agencyId).thenApply(l -> l.stream().map(GtfsStaticData::getRouteName).toList());
     }
 
     public Map<String, String> mapRouteIdsToRouteName(String agencyId, List<String> routeIds) {
@@ -179,60 +162,15 @@ public class GtfsStaticRepository {
         return chunk.stream().map(routeId -> ReadBatch.builder(GtfsStaticData.class).addGetItem(Key.builder().partitionValue(routeId).sortValue(agencyId + ":" + name).build()).mappedTableResource(table).build()).toList();
     }
 
-    public Optional<String> getRouteNameByTrip(String agencyId, String tripId) {
-        QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
-                k.partitionValue(tripId).sortValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
-        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
-                .queryConditional(queryConditional)
-                .build();
-        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table
-                .query(queryEnhancedRequest);
-        List<java.lang.String> result = Flux.concat(sdkPublisher)
-                .flatMapIterable(Page::items)
-                .map(GtfsStaticData::getRouteName)
-                .collectList()
-                .block();
-        if (result == null || result.isEmpty()) return Optional.empty();
-        return Optional.of(result.get(0));
+    public CompletableFuture<Map<String, String>> getRouteNameToColorMap(String agencyId) {
+        return this.findAllRoutes(agencyId).thenApply(l ->
+                l.stream().collect(
+                        Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor)));
     }
 
-    public Optional<String> getColorFor(String agencyId, String routeFriendlyName) {
-        QueryConditional queryConditional =
-                QueryConditional.keyEqualTo(k -> k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName())
-                        .sortValue(routeFriendlyName));
-        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
-                .addAttributeToProject("routeColor")
-                .queryConditional(queryConditional)
-                .build();
-        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table.index(AGENCY_TYPE_INDEX)
-                .query(queryEnhancedRequest);
-        List<String> result = Flux.concat(sdkPublisher)
-                .flatMapIterable(Page::items)
-                .map(GtfsStaticData::getRouteColor)
-                .collectList()
-                .block();
-        if (result == null || result.isEmpty())
-            return Optional.empty();
-        return Optional.of(result.get(0));
-    }
-
-    public Optional<Integer> getSortOrderFor(String agencyId, String routeFriendlyName) {
-        QueryConditional queryConditional =
-                QueryConditional.keyEqualTo(k -> k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName())
-                        .sortValue(routeFriendlyName));
-        QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
-                .addAttributeToProject("routeSortOrder")
-                .queryConditional(queryConditional)
-                .build();
-        SdkPublisher<Page<GtfsStaticData>> sdkPublisher = table.index(AGENCY_TYPE_INDEX)
-                .query(queryEnhancedRequest);
-        List<Integer> result = Flux.concat(sdkPublisher)
-                .flatMapIterable(Page::items)
-                .map(GtfsStaticData::getRouteSortOrder)
-                .collectList()
-                .block();
-        if (result == null || result.isEmpty())
-            return Optional.empty();
-        return Optional.of(result.get(0));
+    public CompletableFuture<Map<String, Integer>> getRouteNameToSortOrderMap(String agencyId) {
+        return this.findAllRoutes(agencyId).thenApply(l ->
+                l.stream().collect(
+                        Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder)));
     }
 }

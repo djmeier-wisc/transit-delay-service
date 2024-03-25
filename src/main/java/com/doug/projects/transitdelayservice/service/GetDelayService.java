@@ -13,11 +13,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.GroupedFlux;
 
-import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
 
@@ -41,7 +41,7 @@ public class GetDelayService {
      * @throws IllegalArgumentException if startTime is >= endTime
      */
     public LineGraphDataResponse getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
-        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::averageDelayMinutes);
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::medianDelayInMinutes);
     }
 
 
@@ -72,31 +72,48 @@ public class GetDelayService {
      * @return a graph, beginning at startTime, ending at endTime, over the number of units
      */
     private LineGraphDataResponse genericLineGraphConverter(String feedId, GraphOptions graphOptions, RouteTimestampConverter converter) {
-        final long finalStartTime = graphOptions.getStartTime() == null ? TransitDateUtil.getMidnightSixDaysAgo() : graphOptions.getStartTime();
-        final long finalEndTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
-        final int finalUnits = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
-        final String finalFeedId = feedId == null ? "394" : feedId; //default to calling metro transit
-        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(feedId) : graphOptions.getRoutes();
-        final boolean finalUseColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
-        if (finalStartTime >= finalEndTime)
+        final long startTime = graphOptions.getStartTime() == null ? TransitDateUtil.getMidnightSixDaysAgo() : graphOptions.getStartTime();
+        final long endTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
+        final int units = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
+        final String finalFeedId = feedId == null ? "394" : feedId; //default to calling madison metro transit, the original feed to support legacy calls.
+        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(feedId).join() : graphOptions.getRoutes();
+        final boolean useGtfsColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
+        if (startTime >= endTime)
             throw new IllegalArgumentException("startTime must be greater than endTime");
 
 
-        var routeTimestampsMap = repository.getRouteTimestampsMapBy(finalStartTime, finalEndTime, finalRoutes, feedId);
-        Flux<LineGraphData> lineGraphDataList = routeTimestampsMap.map(routeFriendlyName -> {
-            Flux<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName;
-            Flux<Double> currData = timestampsForRoute.groupBy(t -> (t.getTimestamp() - finalStartTime) /
-                            (finalEndTime - finalStartTime))
-                    .sort(Comparator.comparing(GroupedFlux::key))
-                    .map(converter::convert);
-            return lineGraphUtil.getLineGraphData(feedId, routeFriendlyName.key(), currData,
-                    finalUseColor);
-        });
+        var routeTimestampsMap = repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId).join();
+        List<LineGraphData> lineGraphDataList = routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
+            List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
+            if (timestampsForRoute == null) {
+                timestampsForRoute = Collections.emptyList();
+            }
+            List<Double> currData = new ArrayList<>(units * 2);
+            double perUnitSecondLength = (double) (endTime - startTime) / units;
+            int lastIndexUsed = 0;
+            for (int currUnit = 0; currUnit < units; currUnit++) {
+                final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
+                int currLastIndex = timestampsForRoute.size();
+                for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
+                    if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                        currLastIndex = i;
+                        break;
+                    }
+                }
+                Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
+                currData.add(converterResult);
+                //get ready for next iteration
+                lastIndexUsed = currLastIndex;
+            }
+            return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
+        }).collect(Collectors.toList());
         lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
-
+        if (useGtfsColor) {
+            lineGraphUtil.populateColor(finalFeedId, lineGraphDataList);
+        }
         LineGraphDataResponse response = new LineGraphDataResponse();
         response.setDatasets(lineGraphDataList);
-        response.setLabels(getColumnLabels(finalStartTime, finalEndTime, finalUnits));
+        response.setLabels(getColumnLabels(startTime, endTime, units));
         return response;
     }
 }
