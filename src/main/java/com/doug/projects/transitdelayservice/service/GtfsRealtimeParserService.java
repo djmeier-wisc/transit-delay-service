@@ -56,10 +56,13 @@ public class GtfsRealtimeParserService {
     @NotNull
     private static BusState adaptBusStateFrom(GtfsRealtime.TripUpdate tu) {
         BusState busState = new BusState();
-        busState.setDelay(tu.getDelay());
-        if (tu.getStopTimeUpdateCount() > 0)
-            busState.setClosestStopId(tu.getStopTimeUpdate(0).getStopId());
         busState.setTripId(tu.getTrip().getTripId());
+        if (tu.getStopTimeUpdateCount() <= 0) {
+            busState.setDelay(tu.getDelay());
+            return busState;
+        }
+        busState.setDelay(tu.getStopTimeUpdate(0).getDeparture().getDelay());
+        busState.setClosestStopId(tu.getStopTimeUpdate(0).getStopId());
         return busState;
     }
 
