@@ -20,7 +20,6 @@ public class GraphOptions {
     private Boolean useColor;
     //the routes to query the db for
     private List<String> routes;
-    private String feedId;
     private Integer lowerOnTimeThreshold;
     private Integer upperOnTimeThreshold;
 }
