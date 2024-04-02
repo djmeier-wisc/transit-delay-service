@@ -1,8 +1,8 @@
 package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
-import lombok.RequiredArgsConstructor;
+import com.doug.projects.transitdelayservice.service.RouteMapperService;
+import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.TimeZone;
 
 @Component
-@RequiredArgsConstructor
+@AllArgsConstructor
 public class LineGraphUtil {
-    private final GtfsStaticRepository gtfsStaticRepository;
+    private RouteMapperService routesService;
 
     public static List<String> getColumnLabels(Long startTime, Long endTime, Integer units) {
         double perUnitSecondLength = (double) (endTime - startTime) / units;
@@ -36,25 +36,19 @@ public class LineGraphUtil {
         return columnLabels;
     }
 
-    public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData) {
+    public LineGraphData getLineGraphData(String routeFriendlyName, List<Double> currData, boolean setColor) {
         LineGraphData lineGraphData = new LineGraphData();
         lineGraphData.setLineLabel(routeFriendlyName);
         lineGraphData.setTension(0.0);
         lineGraphData.setData(currData);
+        if (setColor) {
+            lineGraphData.setBorderColor(routesService.getColorFor(routeFriendlyName));
+        }
         return lineGraphData;
     }
 
-    public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDataList) {
-        var sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId).join();
-        lineGraphDataList.sort((o1, o2) -> {
-            Integer o1Order = sortOrderMap.getOrDefault(o1.getLineLabel(), -1);
-            Integer o2Order = sortOrderMap.getOrDefault(o2.getLineLabel(), -1);
-            return Integer.compare(o1Order, o2Order);
-        });
-    }
-
-    public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {
-        var colorMap = gtfsStaticRepository.getRouteNameToColorMap(feedId).join();
-        lineGraphDataList.forEach(lineGraphData -> lineGraphData.setBorderColor(colorMap.get(lineGraphData.getLineLabel())));
+    public void sortByGTFSSortOrder(List<LineGraphData> lineGraphDatas) {
+        lineGraphDatas.sort((o1, o2) -> Integer.compare(routesService.getSortOrderFor(o1.getLineLabel()),
+                routesService.getSortOrderFor(o2.getLineLabel())));
     }
 }

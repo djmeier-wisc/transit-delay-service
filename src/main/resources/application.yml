@@ -2,9 +2,6 @@ region: us-east-1
 metro:
   realtime: http://transitdata.cityofmadison.com/GTFS-RealTime/TrapezeRealTimeFeed.json
   gtfsStatic: http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip
-  feedId: 394
-openMobilityData:
-  feedSource: https://bit.ly/catalogs-csv
 spring:
   codec:
     max-in-memory-size: 1000KB

@@ -65,28 +65,6 @@
 			<groupId>com.fasterxml.jackson.dataformat</groupId>
 			<artifactId>jackson-dataformat-csv</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>me.xdrop</groupId>
-			<artifactId>fuzzywuzzy</artifactId>
-			<version>1.4.0</version>
-		</dependency>
-		<dependency>
-			<groupId>org.jetbrains</groupId>
-			<artifactId>annotations</artifactId>
-			<version>RELEASE</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-            <groupId>org.mobilitydata</groupId>
-            <artifactId>gtfs-realtime-bindings</artifactId>
-            <version>0.0.8</version>
-		</dependency>
-		<dependency>
-			<groupId>org.zeroturnaround</groupId>
-			<artifactId>zt-zip</artifactId>
-			<version>1.17</version>
-			<type>jar</type>
-		</dependency>
 	</dependencies>
 
 	<build>
@@ -105,10 +83,6 @@
                         </exclude>
                     </excludes>
                 </configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.graalvm.buildtools</groupId>
-				<artifactId>native-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>
