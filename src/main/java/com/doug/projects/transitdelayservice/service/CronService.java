@@ -43,7 +43,7 @@ public class CronService {
      * Writes all ACT agency's data to DynamoDb for processing.
      * Done asynchronously to avoid blocking scheduler thread.
      */
-    @Scheduled(fixedDelay = 5, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     @Async
     public void writeGtfsRealtimeData() {
         if (!doesCronRun)

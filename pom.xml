@@ -77,9 +77,9 @@
 			<scope>compile</scope>
 		</dependency>
 		<dependency>
-			<groupId>com.google.protobuf</groupId>
-			<artifactId>protobuf-java</artifactId>
-			<version>3.25.3</version>
+            <groupId>org.mobilitydata</groupId>
+            <artifactId>gtfs-realtime-bindings</artifactId>
+            <version>0.0.8</version>
 		</dependency>
 		<dependency>
 			<groupId>org.zeroturnaround</groupId>
