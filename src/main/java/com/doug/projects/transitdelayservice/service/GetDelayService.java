@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -41,6 +43,10 @@ public class GetDelayService {
      * @throws IllegalArgumentException if startTime is >= endTime
      */
     public LineGraphDataResponse getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::averageDelayInMinutes);
+    }
+
+    public LineGraphDataResponse getMedianDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
         return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::medianDelayInMinutes);
     }
 
@@ -101,7 +107,8 @@ public class GetDelayService {
                     }
                 }
                 Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                currData.add(converterResult);
+                BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
+                currData.add(bigDecimal.doubleValue());
                 //get ready for next iteration
                 lastIndexUsed = currLastIndex;
             }
