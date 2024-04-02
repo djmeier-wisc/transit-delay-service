@@ -55,4 +55,11 @@ public class RouteTimestampUtil {
         }
         return (double) (sortedDelayList[sortedDelayList.length / 2] / 60);
     }
+
+    public static Double averageDelayInMinutes(List<AgencyRouteTimestamp> routeTimestampList) {
+        return routeTimestampList.stream()
+                .flatMapToInt(RouteTimestampUtil::getDelayStream)
+                .average()
+                .orElse(-1) / 60.;
+    }
 }
