@@ -44,9 +44,9 @@ public class LineGraphUtil {
         return lineGraphData;
     }
 
-    public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDatas) {
+    public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDataList) {
         var sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId).join();
-        lineGraphDatas.sort((o1, o2) -> {
+        lineGraphDataList.sort((o1, o2) -> {
             Integer o1Order = sortOrderMap.getOrDefault(o1.getLineLabel(), -1);
             Integer o2Order = sortOrderMap.getOrDefault(o2.getLineLabel(), -1);
             return Integer.compare(o1Order, o2Order);
@@ -55,8 +55,6 @@ public class LineGraphUtil {
 
     public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {
         var colorMap = gtfsStaticRepository.getRouteNameToColorMap(feedId).join();
-        lineGraphDataList.forEach(lineGraphData -> {
-            lineGraphData.setBorderColor(colorMap.get(lineGraphData.getLineLabel()));
-        });
+        lineGraphDataList.forEach(lineGraphData -> lineGraphData.setBorderColor(colorMap.get(lineGraphData.getLineLabel())));
     }
 }

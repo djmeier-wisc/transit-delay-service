@@ -10,10 +10,10 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 class LineGraphUtilTest {
@@ -41,43 +41,19 @@ class LineGraphUtilTest {
         // For simplicity, let's just check the size of the result list
         assertEquals(units, result.size());
     }
-
     @Test
-    void testGetLineGraphDataColorTrue() {
-        String routeFriendlyName = "TestRoute";
-        String feedId = "TestFeed";
-        List<Double> currData = Arrays.asList(1.0, 2.0, 3.0);
-
-        // Mocking the behavior of the repository
-        when(repository.getColorFor(feedId, routeFriendlyName)).thenReturn(Optional.of("#FFFFFF"));
-
-        LineGraphData result = lineGraphUtil.getLineGraphData(feedId, routeFriendlyName, currData, true);
-
-        assertEquals(routeFriendlyName, result.getLineLabel());
-        assertEquals("#FFFFFF", result.getBorderColor());
-
-        // Verify that getColorFor was called with the correct argument
-        verify(repository, times(1)).getColorFor(feedId, routeFriendlyName);
+    void testPopulateColor() {
+        var feedId = "TestFeed";
+        var lineGraphData = List.of(createLineGraphData("r1"), createLineGraphData("r2"));
+        when(repository.getRouteNameToColorMap(feedId)).thenReturn(
+                CompletableFuture.completedFuture(
+                        Map.of("r1", "#FFF111", "r2", "#FFF222")
+                )
+        );
+        lineGraphUtil.populateColor(feedId, lineGraphData);
+        assertEquals("#FFF111", lineGraphData.get(0).getBorderColor());
+        assertEquals("#FFF222", lineGraphData.get(1).getBorderColor());
     }
-
-    @Test
-    void testGetLineGraphDataColorFalse() {
-        String routeFriendlyName = "TestRoute";
-        String feedId = "TestFeed";
-        List<Double> currData = Arrays.asList(1.0, 2.0, 3.0);
-
-        // Mocking the behavior of the repository
-        when(repository.getColorFor(feedId, routeFriendlyName)).thenReturn(Optional.of("#FFFFFF"));
-
-        LineGraphData result = lineGraphUtil.getLineGraphData(feedId, routeFriendlyName, currData, false);
-
-        assertEquals(routeFriendlyName, result.getLineLabel());
-        assertNull(result.getBorderColor()); //should not be passed when false
-
-        // Verify that getColorFor was called with the correct argument
-        verify(repository, times(0)).getColorFor(feedId, routeFriendlyName);
-    }
-
     @Test
     void testSortByGTFSSortOrder() {
         String feedId = "TestFeed";
@@ -86,9 +62,7 @@ class LineGraphUtilTest {
                         "Route2"));//out of order, route3 should be 3rd
 
         // Mocking the behavior of the repository
-        when(repository.getSortOrderFor(feedId, "Route1")).thenReturn(Optional.of(1));
-        when(repository.getSortOrderFor(feedId, "Route2")).thenReturn(Optional.of(2));
-        when(repository.getSortOrderFor(feedId, "Route3")).thenReturn(Optional.of(3));
+        when(repository.getRouteNameToSortOrderMap(feedId)).thenReturn(CompletableFuture.completedFuture(Map.of("Route1", 1, "Route2", 2, "Route3", 3)));
 
         lineGraphUtil.sortByGTFSSortOrder(feedId, lineGraphDatas);
 
@@ -98,9 +72,7 @@ class LineGraphUtilTest {
         assertEquals("Route3", lineGraphDatas.get(2).getLineLabel());
 
         // Verify that getSortOrderFor was called for each lineGraphData
-        verify(repository, atLeast(1)).getSortOrderFor(feedId, "Route1");
-        verify(repository, atLeast(1)).getSortOrderFor(feedId, "Route2");
-        verify(repository, atLeast(1)).getSortOrderFor(feedId, "Route3");
+        verify(repository, times(1)).getRouteNameToSortOrderMap(feedId);
     }
 
     private LineGraphData createLineGraphData(String label) {

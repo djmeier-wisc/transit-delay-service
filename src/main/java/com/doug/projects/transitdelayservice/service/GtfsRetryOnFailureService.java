@@ -60,6 +60,11 @@ public class GtfsRetryOnFailureService {
                     recheckFeedByStatus(AgencyFeed.Status.UNAVAILABLE, feed);
                 }
                 staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    log.error("Sleeping interrupted for retry. Continuing...");
+                }
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
                 if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
                     log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");

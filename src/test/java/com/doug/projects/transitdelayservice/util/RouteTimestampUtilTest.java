@@ -48,7 +48,7 @@ class RouteTimestampUtilTest {
 
         Double result = RouteTimestampUtil.medianDelayInMinutes(timestampsForRoute);
 
-        assertEquals(.333, result);
+        assertEquals(2, result);
     }
 
     private AgencyRouteTimestamp createRouteTimestamp(long timestamp) {

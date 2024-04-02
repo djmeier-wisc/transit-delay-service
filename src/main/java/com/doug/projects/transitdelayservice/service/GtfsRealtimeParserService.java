@@ -114,7 +114,7 @@ public class GtfsRealtimeParserService {
      * @return an AgencyRealTimeResponse.
      * <p>In the event of failure, status will be set and routeTimestamps field may be null or empty</p>
      */
-    public AgencyRealtimeResponse convertFromSync(AgencyFeed feed) {
+    private AgencyRealtimeResponse convertFromSync(AgencyFeed feed) {
         String feedId = feed.getId();
         String realtimeUrl = feed.getRealTimeUrl();
 
