@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusStates;
+import com.doug.projects.transitdelayservice.entity.dynamodb.RouteTimestamp;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -13,18 +13,18 @@ class RouteTimestampUtilTest {
 
     @Test
     void testGetMaxDelayForRouteInMinutes() {
-        List<AgencyRouteTimestamp> timestampsForRoute =
-                List.of(createRouteTimestamp(1), createRouteTimestamp(2), createRouteTimestamp(3));
+        List<RouteTimestamp> timestampsForRoute =
+                Arrays.asList(createRouteTimestamp(1, 10), createRouteTimestamp(2, 20), createRouteTimestamp(3, 30));
 
-        Double result = RouteTimestampUtil.maxDelayInMinutes(timestampsForRoute);
+        Double result = RouteTimestampUtil.getMaxDelayForRouteInMinutes(timestampsForRoute);
 
         assertEquals(2, result);
     }
 
     @Test
     void testPercentOnTime() {
-        List<AgencyRouteTimestamp> timestampsForRoute =
-                List.of(createRouteTimestamp(1), createRouteTimestamp(2), createRouteTimestamp(3));
+        List<RouteTimestamp> timestampsForRoute =
+                Arrays.asList(createRouteTimestamp(1, 60), createRouteTimestamp(2, 120), createRouteTimestamp(3, 180));
 
         Double result = RouteTimestampUtil.percentOnTime(timestampsForRoute, 1, 1);
 
@@ -32,28 +32,38 @@ class RouteTimestampUtilTest {
     }
 
     @Test
+    void testGetMaxDelayFromBusStatesList() {
+        RouteTimestamp routeTimestamp = createRouteTimestamp(1, 10);
+
+        Integer result = RouteTimestampUtil.getMaxDelayFromBusStatesList(routeTimestamp);
+
+        assertEquals(120, result.intValue());
+    }
+
+    @Test
     void testExtractBusStates() {
         String stringToParse = "10#stopId#123";
 
-        BusState result = BusState.fromString(stringToParse);
+        BusStates result = RouteTimestampUtil.extractBusStates(stringToParse);
         assertEquals(10, result.getDelay().intValue());
         assertEquals("stopId", result.getClosestStopId());
-        assertEquals("123", result.getTripId());
+        assertEquals(123, result.getTripId());
     }
 
     @Test
     void testGetAverageDelayDataForRouteInMinutes() {
-        List<AgencyRouteTimestamp> timestampsForRoute =
-                List.of(createRouteTimestamp(1), createRouteTimestamp(2), createRouteTimestamp(3));
+        List<RouteTimestamp> timestampsForRoute =
+                Arrays.asList(createRouteTimestamp(1, 10), createRouteTimestamp(2, 20), createRouteTimestamp(3, 30));
 
-        Double result = RouteTimestampUtil.medianDelayInMinutes(timestampsForRoute);
+        Double result = RouteTimestampUtil.getAverageDelayDataForRouteInMinutes(timestampsForRoute);
 
-        assertEquals(2, result);
+        assertEquals(.333, result);
     }
 
-    private AgencyRouteTimestamp createRouteTimestamp(long timestamp) {
-        AgencyRouteTimestamp routeTimestamp = new AgencyRouteTimestamp();
+    private RouteTimestamp createRouteTimestamp(long timestamp, double averageDelay) {
+        RouteTimestamp routeTimestamp = new RouteTimestamp();
         routeTimestamp.setTimestamp(1000L * timestamp); // Use some timestamp value based on the timestamp
+        routeTimestamp.setAverageDelay(averageDelay);
         routeTimestamp.setBusStatesList(Arrays.asList("60#stopId#123", "120#stopId#456"));
         return routeTimestamp;
     }

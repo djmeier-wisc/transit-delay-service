@@ -12,7 +12,6 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@Deprecated
 public class RouteTimestamp {
     /**
      * The route
