@@ -5,10 +5,7 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.util.CollectionUtils;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.OptionalInt;
+import java.util.*;
 import java.util.stream.IntStream;
 
 public class RouteTimestampUtil {
@@ -57,9 +54,12 @@ public class RouteTimestampUtil {
     }
 
     public static Double averageDelayInMinutes(List<AgencyRouteTimestamp> routeTimestampList) {
-        return routeTimestampList.stream()
+        OptionalDouble resp = routeTimestampList.stream()
                 .flatMapToInt(RouteTimestampUtil::getDelayStream)
-                .average()
-                .orElse(-1) / 60.;
+                .average();
+        if (resp.isEmpty()) {
+            return null;
+        }
+        return resp.getAsDouble() / 60.;
     }
 }

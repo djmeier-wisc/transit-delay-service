@@ -107,8 +107,12 @@ public class GetDelayService {
                     }
                 }
                 Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
-                currData.add(bigDecimal.doubleValue());
+                if (converterResult != null) {
+                    BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
+                    currData.add(bigDecimal.doubleValue());
+                } else {
+                    currData.add(null);
+                }
                 //get ready for next iteration
                 lastIndexUsed = currLastIndex;
             }
