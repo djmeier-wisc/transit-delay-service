@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -53,7 +55,7 @@ public class CronService {
             return;
         log.info("Starting realtime data write");
         CompletableFuture<?>[] allFutures =
-                agencyFeedRepository.getAllAgencyFeeds()
+                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
                         .stream()
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
