@@ -14,7 +14,6 @@ import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zeroturnaround.zip.ZipUtil;
 
@@ -118,37 +117,15 @@ public class GtfsStaticParserService {
     }
 
     /**
-     * Writes gtfs static data as .csv files to disk under /files/{id}/{type}.csv.
-     * It is up to the callee to determine successful completion time & handle errors.
-     * <p>
-     * This method may never complete. The callee _must_ set a timeout.
-     * Files will only be written if they are in TYPES.
-     * This does not mean that all TYPES will be written, since sometimes people put up bad GTFS feeds.
-     *
-     * @param staticUrl the url to download the gtfs zip from
-     * @param feedId    the id to use when writing data to disk
+     * Gets the associated type with this filename by checking whether the filename ENDS with type.getFileName.
      */
-    private boolean writeGtfsRoutesToDiskSync(String staticUrl, String feedId) throws IOException {
-        var conn = ((HttpURLConnection) new URL(staticUrl).openConnection());
-        if (conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM || conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP || conn.getResponseCode() == 308) {
-            log.info("Redirected id \"{}\" to \"{}\"", feedId, staticUrl);
-            //call with new url, don't write the old one.
-            return writeGtfsRoutesToDiskSync(conn.getHeaderField("Location"), feedId);
-        } else if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
-            log.error("Failed to download static data from \"{}\", resCode \"{}\"", staticUrl, conn.getResponseCode());
-            return false;
+    public static GtfsStaticData.TYPE getTypeEndsWith(String fileName) {
+        for (GtfsStaticData.TYPE type : GtfsStaticData.TYPE.values()) {
+            if (StringUtils.endsWith(fileName, type.getFileName())) {
+                return type;
+            }
         }
-        try (BufferedInputStream agencyGtfsZipStream = new BufferedInputStream(new URL(staticUrl).openStream())) {
-            //all hail zt-zip. The code before this was hard to read and difficult to maintain
-            var outputDir = new File("files" + File.separator + feedId);
-            ZipUtil.unpack(agencyGtfsZipStream, outputDir, fileName -> {
-                //only write files that we have a valid TYPE to parse for.
-                GtfsStaticData.TYPE type = getType(fileName.replace(".txt", ".csv"));
-                if (type == null) return null;
-                return type.getFileName();
-            });
-            return true;
-        }
+        return null;
     }
 
     public void writeGtfsStaticDataToDynamoFromDiskSync(AgencyFeed feed) {
@@ -226,19 +203,36 @@ public class GtfsStaticParserService {
     }
 
     /**
-     * Gets the type associated with this fileName. If no TYPE is found, return null.
-     * Useful for checking if this is a GTFS file we want to write to disk for further parsing.
+     * Writes gtfs static data as .csv files to disk under /files/{id}/{type}.csv.
+     * It is up to the callee to determine successful completion time & handle errors.
+     * <p>
+     * This method may never complete. The callee _must_ set a timeout.
+     * Files will only be written if they are in TYPES.
+     * This does not mean that all TYPES will be written, since sometimes people put up bad GTFS feeds.
      *
-     * @param fileName the fileName to check TYPE against
-     * @return the TYPE, if found, null otherwise.
+     * @param staticUrl the url to download the gtfs zip from
+     * @param feedId    the id to use when writing data to disk
      */
-    @Nullable
-    public static GtfsStaticData.TYPE getType(String fileName) {
-        for (GtfsStaticData.TYPE type : GtfsStaticData.TYPE.values()) {
-            if (type.getFileName().equals(fileName)) {
-                return type;
-            }
+    private boolean writeGtfsRoutesToDiskSync(String staticUrl, String feedId) throws IOException {
+        var conn = ((HttpURLConnection) new URL(staticUrl).openConnection());
+        if (conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM || conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP || conn.getResponseCode() == 308) {
+            log.info("Redirected id \"{}\" to \"{}\"", feedId, staticUrl);
+            //call with new url, don't write the old one.
+            return writeGtfsRoutesToDiskSync(conn.getHeaderField("Location"), feedId);
+        } else if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
+            log.error("Failed to download static data from \"{}\", resCode \"{}\"", staticUrl, conn.getResponseCode());
+            return false;
         }
-        return null;
+        try (BufferedInputStream agencyGtfsZipStream = new BufferedInputStream(new URL(staticUrl).openStream())) {
+            //all hail zt-zip. The code before this was hard to read and difficult to maintain
+            var outputDir = new File("files" + File.separator + feedId);
+            ZipUtil.unpack(agencyGtfsZipStream, outputDir, fileName -> {
+                //only write files that we have a valid TYPE to parse for.
+                GtfsStaticData.TYPE type = getTypeEndsWith(fileName.replace(".txt", ".csv"));
+                if (type == null) return null;
+                return type.getFileName();
+            });
+            return true;
+        }
     }
 }

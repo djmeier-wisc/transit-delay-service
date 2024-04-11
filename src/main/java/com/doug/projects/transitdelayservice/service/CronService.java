@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -32,6 +34,7 @@ public class CronService {
             log.info("Gathering Feeds...");
             var feeds = gtfsFeedAggregator.gatherRTFeeds();
             log.info("Gathered Feeds. Writing feeds to table...");
+            agencyFeedRepository.removeAllAgencyFeeds();
             agencyFeedRepository.writeAgencyFeeds(feeds);
             log.info("Wrote feeds successfully.");
         } catch (Exception e) {
@@ -50,8 +53,10 @@ public class CronService {
             return;
         log.info("Starting realtime data write");
         CompletableFuture<?>[] allFutures =
-                agencyFeedRepository.getACTStatusAgencyFeeds()
-                        .stream().map(feed -> rtResponseService.convertFromAsync(feed, 60)
+                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
+                        .stream()
+                        .map(feed ->
+                                rtResponseService.convertFromAsync(feed, 60)
                                 .thenApply(retryOnFailureService::reCheckFailures)
                                 .thenAccept(routeTimestampRepository::saveAll))
                         .toArray(CompletableFuture[]::new);

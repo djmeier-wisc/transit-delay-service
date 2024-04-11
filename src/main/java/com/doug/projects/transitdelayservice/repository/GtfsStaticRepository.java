@@ -62,7 +62,7 @@ public class GtfsStaticRepository {
      * @param data the data to save
      */
     private void parallelSaveAll(List<GtfsStaticData> data) {
-        CompletableFuture[] result = DynamoUtils.chunkList(data, 25)
+        CompletableFuture<?>[] result = DynamoUtils.chunkList(data, 25)
                 .stream()
                 .map(this::asyncBatchWrite)
                 .toArray(CompletableFuture[]::new);
@@ -73,8 +73,8 @@ public class GtfsStaticRepository {
     /**
      * Writes all items in list to DynamoDb asynchronously.
      *
-     * @param chunkedList
-     * @return
+     * @param chunkedList a list of size 25 or lower
+     * @return a completableFuture which writes this data
      */
     private CompletableFuture<Void> asyncBatchWrite(List<GtfsStaticData> chunkedList) {
         return enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
@@ -149,7 +149,7 @@ public class GtfsStaticRepository {
         if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(tripIds)) return Collections.emptyMap();
         List<String> uniqueTripIds = tripIds.stream().distinct().toList();
         return DynamoUtils.chunkList(uniqueTripIds, 100).stream().flatMap(chunkList -> {
-            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.ROUTE.getName())).build();
+            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.TRIP.getName())).build();
             return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
                     .flatMapIterable(p -> p.resultsForTable(table))
                     .filter(Objects::nonNull)

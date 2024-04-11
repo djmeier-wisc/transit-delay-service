@@ -26,9 +26,15 @@ public class CRUDController {
         return ResponseEntity.ok(staticRepository.findAllRouteNames(agencyId).join());
     }
 
-    @GetMapping("/v1/getAllAgencies")
+    @GetMapping("/v1/agencies/all")
     @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
     public ResponseEntity<List<AgencyFeed>> getAllAgencies() {
-        return ResponseEntity.ok(agencyFeedRepository.getACTStatusAgencyFeeds());
+        return ResponseEntity.ok(agencyFeedRepository.getAllAgencyFeeds());
+    }
+
+    @GetMapping("v1/agencies/active")
+    @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
+    public ResponseEntity<List<AgencyFeed>> getActiveAgencies() {
+        return ResponseEntity.ok(agencyFeedRepository.getAgencyFeedsByStatus(AgencyFeed.Status.ACTIVE));
     }
 }

@@ -34,9 +34,9 @@ public class AgencyFeedRepository {
             Set<String> seenIds = new HashSet<>();
             list.removeIf(feed -> !seenIds.add(feed.getId()));
             enhancedClient.batchWriteItem(b -> {
-                for (var feed : list) {
-                    b.addWriteBatch(WriteBatch.builder(AgencyFeed.class).mappedTableResource(table).addPutItem(feed).build());
-                }
+                        for (var feed : list) {
+                            b.addWriteBatch(WriteBatch.builder(AgencyFeed.class).mappedTableResource(table).addPutItem(feed).build());
+                        }
                     })
                     .join();
         });
@@ -64,12 +64,29 @@ public class AgencyFeedRepository {
                 .join();
     }
 
-    public List<AgencyFeed> getACTStatusAgencyFeeds() {
-        return Flux.concat(table.query(q ->
-                        q.queryConditional(
-                                        QueryConditional.keyEqualTo(k -> k.partitionValue("ACT")))
-                                .build()).items())
+    public List<AgencyFeed> getAgencyFeedsByStatus(AgencyFeed.Status status) {
+        return Flux.concat(table
+                        .query(q ->
+                                q.queryConditional(
+                                        QueryConditional.keyEqualTo(k -> k.partitionValue(status.toString()))))
+                        .items())
                 .collectList()
-                .block();
+                .toFuture()
+                .join();
+    }
+
+    public List<AgencyFeed> getAllAgencyFeeds() {
+        return Flux.concat(table.scan().items())
+                .collectList()
+                .toFuture()
+                .join();
+    }
+
+    public void removeAllAgencyFeeds() {
+        Flux.concat(table.scan().items())
+                .collectList()
+                .toFuture()
+                .thenAccept(this::removeAgencyFeeds)
+                .join();
     }
 }

@@ -38,8 +38,8 @@ public class GtfsRetryOnFailureService {
     /**
      * Recursive retry method. Feeds get one retry on "OUTDATED" status
      *
-     * @param feedStatus
-     * @param feed
+     * @param feedStatus the (presumably) failed status of the feed. Unless the feed is outdated or ACTIVE, we write the failure status
+     * @param feed the feed to check against. If the status is some kind of failure, it will be used to remove the failed feed.
      */
     @Async
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
@@ -48,7 +48,7 @@ public class GtfsRetryOnFailureService {
                 //do nothing
             }
             case UNAUTHORIZED, DELETED, UNAVAILABLE -> {
-                log.error("UPDATING FEED TO UNAVAILABLE/UNAUTH/DELETED");
+                log.error("Updating feed {} to {}", feed.getId(), feedStatus);
                 feedRepository.removeAgencyFeed(feed);
                 feed.setStatus(String.valueOf(feedStatus));
                 feedRepository.writeAgencyFeed(feed);
