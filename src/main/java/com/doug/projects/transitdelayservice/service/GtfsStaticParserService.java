@@ -10,6 +10,7 @@ import com.doug.projects.transitdelayservice.entity.gtfs.csv.TripAttributes;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
+import com.fasterxml.jackson.dataformat.csv.CsvParser;
 import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -178,6 +179,7 @@ public class GtfsStaticParserService {
         try (MappingIterator<T> attributesIterator = csvMapper
                 .readerWithSchemaFor(clazz)
                 .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
                 .readValues(file)) {
             List<GtfsStaticData> gtfsList = new ArrayList<>(100);
             while (attributesIterator.hasNext()) {

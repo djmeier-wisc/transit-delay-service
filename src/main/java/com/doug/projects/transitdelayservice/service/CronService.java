@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.UNAVAILABLE;
 
 @Service
 @RequiredArgsConstructor
@@ -23,12 +23,14 @@ public class CronService {
     private final GtfsRealtimeParserService rtResponseService;
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsRetryOnFailureService retryOnFailureService;
-    @Value("${doesCronRun}")
-    private Boolean doesCronRun;
+    @Value("${doesAgencyCronRun}")
+    private Boolean doesAgencyCronRun;
+    @Value("${doesRealtimeCronRun}")
+    private Boolean doesRealtimeCronRun;
 
     @Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
     public void writeFeeds() {
-        if (!doesCronRun)
+        if (!doesAgencyCronRun)
             return;
         try {
             log.info("Gathering Feeds...");
@@ -49,11 +51,11 @@ public class CronService {
     @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     @Async
     public void writeGtfsRealtimeData() {
-        if (!doesCronRun)
+        if (!doesRealtimeCronRun)
             return;
         log.info("Starting realtime data write");
         CompletableFuture<?>[] allFutures =
-                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
+                agencyFeedRepository.getAgencyFeedsByStatus(UNAVAILABLE)
                         .stream()
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)

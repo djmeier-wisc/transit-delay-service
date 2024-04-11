@@ -1,7 +1,5 @@
 package com.doug.projects.transitdelayservice.controller;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
-import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,23 +16,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CRUDController {
     private final GtfsStaticRepository staticRepository;
-    private final AgencyFeedRepository agencyFeedRepository;
 
     @GetMapping("/v1/getAllRouteNames")
     @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
     public ResponseEntity<List<String>> getAllRoutes(@RequestParam(defaultValue = "394") @Parameter(description = "Agency ID, defaulting to 394/Metro Transit Madison") final String agencyId) {
         return ResponseEntity.ok(staticRepository.findAllRouteNames(agencyId).join());
-    }
-
-    @GetMapping("/v1/agencies/all")
-    @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
-    public ResponseEntity<List<AgencyFeed>> getAllAgencies() {
-        return ResponseEntity.ok(agencyFeedRepository.getAllAgencyFeeds());
-    }
-
-    @GetMapping("v1/agencies/active")
-    @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
-    public ResponseEntity<List<AgencyFeed>> getActiveAgencies() {
-        return ResponseEntity.ok(agencyFeedRepository.getAgencyFeedsByStatus(AgencyFeed.Status.ACTIVE));
     }
 }
