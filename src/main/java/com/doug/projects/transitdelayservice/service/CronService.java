@@ -35,7 +35,6 @@ public class CronService {
         try {
             log.info("Gathering Feeds...");
             var feeds = gtfsFeedAggregator.gatherRTFeeds();
-            var oldFeeds = agencyFeedRepository.getAllAgencyFeeds();
             log.info("Gathered Feeds. Writing feeds to table...");
             agencyFeedRepository.removeAllAgencyFeeds();
             agencyFeedRepository.writeAgencyFeeds(feeds);
