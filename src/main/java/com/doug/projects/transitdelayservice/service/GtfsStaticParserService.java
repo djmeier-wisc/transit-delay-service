@@ -31,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
+import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
 
 @Service
 @RequiredArgsConstructor
@@ -220,7 +221,7 @@ public class GtfsStaticParserService {
         if (conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM || conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP || conn.getResponseCode() == 308) {
             log.info("Redirected id \"{}\" to \"{}\"", feedId, staticUrl);
             //call with new url, don't write the old one.
-            return writeGtfsRoutesToDiskSync(conn.getHeaderField("Location"), feedId);
+            return writeGtfsRoutesToDiskSync(handleRedirect(conn), feedId);
         } else if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
             log.error("Failed to download static data from \"{}\", resCode \"{}\"", staticUrl, conn.getResponseCode());
             return false;

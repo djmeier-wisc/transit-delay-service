@@ -21,6 +21,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
+import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.isRedirect;
 import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.CANCELED;
 
 @Service
@@ -68,10 +70,6 @@ public class GtfsRealtimeParserService {
         busState.setDelay(tu.getStopTimeUpdate(0).getDeparture().getDelay());
         busState.setClosestStopId(tu.getStopTimeUpdate(0).getStopId());
         return busState;
-    }
-
-    private static boolean isRedirect(HttpURLConnection conn) throws IOException {
-        return conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM || conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP;
     }
 
     @NotNull
@@ -129,12 +127,11 @@ public class GtfsRealtimeParserService {
             log.info("Reading realtime feed from id: {}, url: {}", feedId, realtimeUrl);
             var conn = ((HttpURLConnection) new URL(realtimeUrl).openConnection());
             if (isRedirect(conn)) {
-                log.info("Redirected id \"{}\" to \"{}\"", feedId, realtimeUrl);
-                //call new, redirected url
-                //this should be in this "Location" header
-                feed.setRealTimeUrl(conn.getHeaderField("Location"));
+                feed.setRealTimeUrl(handleRedirect(conn));
                 return convertFromSync(feed);
-            } else if (StringUtils.contains("401", conn.getResponseMessage()) || conn.getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+            } else if (StringUtils.contains("401", conn.getResponseMessage()) ||
+                    conn.getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED ||
+                    conn.getResponseCode() == HttpURLConnection.HTTP_FORBIDDEN) {
                 log.error("Connection is unauthorized for feedId: {}", feedId);
                 return AgencyRealtimeResponse.builder()
                         .feedStatus(AgencyFeed.Status.UNAUTHORIZED)
