@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -28,7 +29,36 @@ public class GtfsFeedAggregator {
         return "US".equals(f.getCountryCode()) && "tu".equals(f.getEntityType()) && StringUtils.isBlank(f.getStatus()) && StringUtils.isNotBlank(f.getStaticReference());
     }
 
-    public List<OpenMobilitySource> gatherAllFeedData() {
+    private static String findNewStaticId(String oldStaticId, Map<String, String> oldIdToNewIdMap) {
+        String newStaticId = oldIdToNewIdMap.get(oldStaticId);
+        if (newStaticId == null) {
+            return oldStaticId;
+        }
+        return findNewStaticId(newStaticId, oldIdToNewIdMap);
+    }
+
+    /**
+     * Finds root feed id, searching for redirects in other sources and static references recursively.
+     *
+     * @param rtFeedId      the current feed id to search for
+     * @param allSourcesMap all sources map
+     * @param redirectMap   all redirects map
+     * @return the root feed id of the current feed id.
+     */
+    private static String findRootRTFeed(String rtFeedId, Map<String, OpenMobilitySource> allSourcesMap, Map<String,
+            OpenMobilitySource> redirectMap) {
+        if (redirectMap.containsKey(rtFeedId)) {
+            return findRootRTFeed(redirectMap.get(rtFeedId).getMdbSourceId(), allSourcesMap, redirectMap);
+        }
+        String rtFeedStaticReference = allSourcesMap.getOrDefault(rtFeedId, new OpenMobilitySource())
+                .getStaticReference();
+        if (StringUtils.isNotBlank(rtFeedStaticReference)) {
+            return findRootRTFeed(rtFeedStaticReference, allSourcesMap, redirectMap);
+        }
+        return rtFeedId;
+    }
+
+    private List<OpenMobilitySource> gatherAllFeedData() {
         try {
             BufferedInputStream in = new BufferedInputStream(java.net.URI.create(feedUrl)
                     .toURL()
@@ -61,6 +91,9 @@ public class GtfsFeedAggregator {
         Map<String, OpenMobilitySource> redirectMap = allSources.stream()
                 .filter(o -> StringUtils.isNotBlank(o.getRedirectId()))
                 .collect(Collectors.toMap(OpenMobilitySource::getRedirectId, Function.identity()));
+        Map<String, String> oldIdToNewIdMap = allSources.stream()
+                .filter(o -> StringUtils.isNotBlank(o.getRedirectId()))
+                .collect(Collectors.toMap(OpenMobilitySource::getMdbSourceId, OpenMobilitySource::getRedirectId));
         //all realTime tripUpdate feeds
         List<OpenMobilitySource> rtFeeds = allSources.stream()
                 .filter(GtfsFeedAggregator::isTripUpdateFeed)
@@ -69,8 +102,8 @@ public class GtfsFeedAggregator {
 
         return rtFeeds.stream()
                 .map(rtFeed -> {
-                    OpenMobilitySource staticFeed = allSourcesMap.get(rtFeed.getStaticReference());
-
+                    OpenMobilitySource staticFeed =
+                            allSourcesMap.get(findNewStaticId(rtFeed.getStaticReference(), oldIdToNewIdMap));
                     return AgencyFeed.builder()
                             .realTimeUrl(rtFeed.getDirectDownloadUrl())
                             .staticUrl(staticFeed.getDirectDownloadUrl())
@@ -80,26 +113,7 @@ public class GtfsFeedAggregator {
                             .state(rtFeed.getSubdivisionName())
                             .build();
                 })
+                .sorted(Comparator.comparing(AgencyFeed::getId))
                 .toList();
-    }
-
-    /**
-     * Finds root feed id, searching for redirects in other sources and static references recursively.
-     *
-     * @param rtFeedId      the current feed id to search for
-     * @param allSourcesMap all sources map
-     * @param redirectMap   all redirects map
-     * @return the root feed id of the current feed id.
-     */
-    public String findRootRTFeed(String rtFeedId, Map<String, OpenMobilitySource> allSourcesMap, Map<String, OpenMobilitySource> redirectMap) {
-        if (redirectMap.containsKey(rtFeedId)) {
-            return findRootRTFeed(redirectMap.get(rtFeedId).getMdbSourceId(), allSourcesMap, redirectMap);
-        }
-        String rtFeedStaticReference = allSourcesMap.getOrDefault(rtFeedId, new OpenMobilitySource())
-                .getStaticReference();
-        if (StringUtils.isNotBlank(rtFeedStaticReference)) {
-            return findRootRTFeed(rtFeedStaticReference, allSourcesMap, redirectMap);
-        }
-        return rtFeedId;
     }
 }
