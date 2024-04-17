@@ -21,11 +21,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.CANCELED;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GtfsRealtimeParserService {
     public static final String UNKNOWN_ROUTE = "UNKNOWN_ROUTE";
+    public static final List<GtfsRealtime.TripDescriptor.ScheduleRelationship> ignorableScheduleRelationshipEnums =
+            List.of(CANCELED);
     private final GtfsStaticRepository repository;
 
     /**
@@ -35,7 +39,7 @@ public class GtfsRealtimeParserService {
      * @return true if all required fields are not null
      */
     private static boolean validateRequiredFields(GtfsRealtime.TripUpdate entity) {
-        return true;
+        return !ignorableScheduleRelationshipEnums.contains(entity.getTrip().getScheduleRelationship());
     }
 
     @NotNull
