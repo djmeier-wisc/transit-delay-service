@@ -116,7 +116,8 @@ public class GtfsStaticRepository {
         //RxJava stuff. Convert the list query to a list of routeName, get distinct, and return as list.
         return Flux.concat(sdkPublisher)
                 .flatMapIterable(Page::items)
-                .sort(Comparator.comparing(GtfsStaticData::getRouteSortOrder))
+                .sort(Comparator.comparing(GtfsStaticData::getRouteSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+                .sort(Comparator.comparing(GtfsStaticData::getRouteName))
                 .distinct()
                 .collectList()
                 .toFuture();
