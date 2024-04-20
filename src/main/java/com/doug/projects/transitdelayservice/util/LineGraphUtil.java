@@ -55,6 +55,13 @@ public class LineGraphUtil {
 
     public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {
         var colorMap = gtfsStaticRepository.getRouteNameToColorMap(feedId).join();
-        lineGraphDataList.forEach(lineGraphData -> lineGraphData.setBorderColor(colorMap.get(lineGraphData.getLineLabel())));
+        lineGraphDataList.forEach(lineGraphData -> {
+            var color = colorMap.get(lineGraphData.getLineLabel());
+            //by accident, if color is not provided in gtfs file, we put #null in the db. Whoops. This fixes that
+            if ("#null".equalsIgnoreCase(color)) {
+                color = null;
+            }
+            lineGraphData.setBorderColor(color);
+        });
     }
 }
