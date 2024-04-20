@@ -9,6 +9,7 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
@@ -105,7 +106,7 @@ public class GtfsStaticRepository {
         }
     }
 
-    public CompletableFuture<List<GtfsStaticData>> findAllRoutes(String agencyId) {
+    public Mono<List<GtfsStaticData>> findAllRoutes(String agencyId) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
                 k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
         QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
@@ -120,8 +121,7 @@ public class GtfsStaticRepository {
                         .thenComparing(GtfsStaticData::getRouteName, Comparator.nullsLast(Comparator.naturalOrder())))
                 .filter(gtfsStaticData -> Objects.nonNull(gtfsStaticData.getRouteName()))
                 .distinct()
-                .collectList()
-                .toFuture();
+                .collectList();
     }
 
     /**
@@ -131,8 +131,8 @@ public class GtfsStaticRepository {
      * @param agencyId the agencyId to search the DB for
      * @return the routeNames associated with that agency.
      */
-    public CompletableFuture<List<String>> findAllRouteNames(String agencyId) {
-        return this.findAllRoutes(agencyId).thenApply(l -> l.stream().map(GtfsStaticData::getRouteName).toList());
+    public Mono<List<String>> findAllRouteNames(String agencyId) {
+        return this.findAllRoutes(agencyId).map(l -> l.stream().map(GtfsStaticData::getRouteName).distinct().toList());
     }
 
     public Map<String, String> mapRouteIdsToRouteName(String agencyId, List<String> routeIds) {
@@ -165,14 +165,18 @@ public class GtfsStaticRepository {
     }
 
     public CompletableFuture<Map<String, String>> getRouteNameToColorMap(String agencyId) {
-        return this.findAllRoutes(agencyId).thenApply(l ->
-                l.stream().collect(
-                        Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor)));
+        return this.findAllRoutes(agencyId).map(l ->
+                        l.stream()
+                                .filter(route -> route != null && route.getRouteName() != null && route.getRouteColor() != null)
+                                .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor, (first, second) -> second)))
+                .toFuture();
     }
 
     public CompletableFuture<Map<String, Integer>> getRouteNameToSortOrderMap(String agencyId) {
-        return this.findAllRoutes(agencyId).thenApply(l ->
-                l.stream().collect(
-                        Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder)));
+        return this.findAllRoutes(agencyId).map(l ->
+                        l.stream()
+                                .filter(route -> route != null && route.getRouteName() != null && route.getRouteSortOrder() != null)
+                                .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder, (first, second) -> second)))
+                .toFuture();
     }
 }
