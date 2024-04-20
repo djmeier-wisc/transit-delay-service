@@ -5,6 +5,7 @@ import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
@@ -88,5 +89,11 @@ public class AgencyFeedRepository {
                 .toFuture()
                 .thenAccept(this::removeAgencyFeeds)
                 .join();
+    }
+
+    public Mono<AgencyFeed> getAgencyFeedById(String feedId) {
+        return Flux.concat(table.scan().items())
+                .filter(feed -> feedId.equals(feed.getId()))
+                .next();
     }
 }
