@@ -166,13 +166,15 @@ public class GtfsStaticRepository {
 
     public CompletableFuture<Map<String, String>> getRouteNameToColorMap(String agencyId) {
         return this.findAllRoutes(agencyId).thenApply(l ->
-                l.stream().collect(
-                        Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor)));
+                l.stream()
+                        .filter(route -> route != null && route.getRouteName() != null && route.getRouteColor() != null)
+                        .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor, (first, second) -> second)));
     }
 
     public CompletableFuture<Map<String, Integer>> getRouteNameToSortOrderMap(String agencyId) {
         return this.findAllRoutes(agencyId).thenApply(l ->
-                l.stream().collect(
-                        Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder)));
+                l.stream()
+                        .filter(route -> route != null && route.getRouteName() != null && route.getRouteSortOrder() != null)
+                        .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder, (first, second) -> second)));
     }
 }
