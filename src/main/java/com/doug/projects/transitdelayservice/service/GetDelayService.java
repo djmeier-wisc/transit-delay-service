@@ -95,7 +95,7 @@ public class GetDelayService {
         final long endTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
         final int units = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
         final String finalFeedId = feedId == null ? "394" : feedId; //default to calling madison metro transit, the original feed to support legacy calls.
-        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(feedId).join() : graphOptions.getRoutes();
+        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(feedId).toFuture().join() : graphOptions.getRoutes();
         final boolean useGtfsColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
         if (startTime >= endTime)
             throw new IllegalArgumentException("startTime must be greater than endTime");
