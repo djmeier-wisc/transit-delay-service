@@ -1,7 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.GraphOptions;
-import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
@@ -13,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -42,11 +42,11 @@ public class GetDelayService {
      * less than a day). Delay over the period is averaged to the thousandths decimal place.
      * @throws IllegalArgumentException if startTime is >= endTime
      */
-    public LineGraphDataResponse getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
+    public Mono<LineGraphDataResponse> getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
         return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::averageDelayInMinutes);
     }
 
-    public LineGraphDataResponse getMedianDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
+    public Mono<LineGraphDataResponse> getMedianDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
         return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::medianDelayInMinutes);
     }
 
@@ -61,16 +61,16 @@ public class GetDelayService {
      * less than a day). Delay over the period is averaged to the thousandths decimal place.
      * @throws IllegalArgumentException if startTime is >= endTime
      */
-    public LineGraphDataResponse getMaxDelayFor(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
+    public Mono<LineGraphDataResponse> getMaxDelayFor(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
         //validations, if not set default
         return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::maxDelayInMinutes);
     }
 
-    public LineGraphDataResponse getPercentOnTimeFor(String feedId, GraphOptions graphOptions, Integer lower, Integer upper) {
+    public Mono<LineGraphDataResponse> getPercentOnTimeFor(String feedId, GraphOptions graphOptions, Integer lower, Integer upper) {
         return genericLineGraphConverter(feedId, graphOptions, ((routeTimestampList) -> RouteTimestampUtil.percentOnTime(routeTimestampList, lower, upper)));
     }
 
-    public LineGraphDataResponse getPercentOnTimeFor(String feedId, GraphOptions graphOptions) {
+    public Mono<LineGraphDataResponse> getPercentOnTimeFor(String feedId, GraphOptions graphOptions) {
         if (graphOptions.getLowerOnTimeThreshold() == null) {
             graphOptions.setLowerOnTimeThreshold(-5);
         }
@@ -87,57 +87,59 @@ public class GetDelayService {
      * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
      *
      * @param graphOptions the options used to create a graph
-     * @param converter the function run for after gathering all routeTimestamps.
+     * @param converter    the function run for after gathering all routeTimestamps.
      * @return a graph, beginning at startTime, ending at endTime, over the number of units
      */
-    private LineGraphDataResponse genericLineGraphConverter(String feedId, GraphOptions graphOptions, RouteTimestampConverter converter) {
+    private Mono<LineGraphDataResponse> genericLineGraphConverter(String feedId, GraphOptions graphOptions, RouteTimestampConverter converter) {
+
         final long startTime = graphOptions.getStartTime() == null ? TransitDateUtil.getMidnightSixDaysAgo() : graphOptions.getStartTime();
         final long endTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
         final int units = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
         final String finalFeedId = feedId == null ? "394" : feedId; //default to calling madison metro transit, the original feed to support legacy calls.
-        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? gtfsStaticRepository.findAllRouteNames(feedId).toFuture().join() : graphOptions.getRoutes();
+        final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? Collections.emptyList() : graphOptions.getRoutes();
         final boolean useGtfsColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
         if (startTime >= endTime)
             throw new IllegalArgumentException("startTime must be greater than endTime");
 
-
-        var routeTimestampsMap = repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId).join();
-        List<LineGraphData> lineGraphDataList = routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
-            List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
-            if (timestampsForRoute == null) {
-                timestampsForRoute = Collections.emptyList();
-            }
-            List<Double> currData = new ArrayList<>(units * 2);
-            double perUnitSecondLength = (double) (endTime - startTime) / units;
-            int lastIndexUsed = 0;
-            for (int currUnit = 0; currUnit < units; currUnit++) {
-                final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-                int currLastIndex = timestampsForRoute.size();
-                for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                    if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                        currLastIndex = i;
-                        break;
+        return repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId).map(routeTimestampsMap -> {
+            return routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
+                List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
+                if (timestampsForRoute == null) {
+                    timestampsForRoute = Collections.emptyList();
+                }
+                List<Double> currData = new ArrayList<>(units * 2);
+                double perUnitSecondLength = (double) (endTime - startTime) / units;
+                int lastIndexUsed = 0;
+                for (int currUnit = 0; currUnit < units; currUnit++) {
+                    final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
+                    int currLastIndex = timestampsForRoute.size();
+                    for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
+                        if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                            currLastIndex = i;
+                            break;
+                        }
                     }
+                    Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
+                    if (converterResult != null) {
+                        BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
+                        currData.add(bigDecimal.doubleValue());
+                    } else {
+                        currData.add(null);
+                    }
+                    //get ready for next iteration
+                    lastIndexUsed = currLastIndex;
                 }
-                Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                if (converterResult != null) {
-                    BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
-                    currData.add(bigDecimal.doubleValue());
-                } else {
-                    currData.add(null);
-                }
-                //get ready for next iteration
-                lastIndexUsed = currLastIndex;
+                return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
+            }).collect(Collectors.toList());
+        }).map(lineGraphDataList -> {
+            lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
+            if (useGtfsColor) {
+                lineGraphUtil.populateColor(finalFeedId, lineGraphDataList);
             }
-            return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
-        }).collect(Collectors.toList());
-        lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
-        if (useGtfsColor) {
-            lineGraphUtil.populateColor(finalFeedId, lineGraphDataList);
-        }
-        LineGraphDataResponse response = new LineGraphDataResponse();
-        response.setDatasets(lineGraphDataList);
-        response.setLabels(getColumnLabels(startTime, endTime, units));
-        return response;
+            LineGraphDataResponse response = new LineGraphDataResponse();
+            response.setDatasets(lineGraphDataList);
+            response.setLabels(getColumnLabels(startTime, endTime, units));
+            return response;
+        });
     }
 }

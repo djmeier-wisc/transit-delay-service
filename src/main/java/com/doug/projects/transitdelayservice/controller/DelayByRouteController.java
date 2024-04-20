@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
@@ -22,12 +23,12 @@ public class DelayByRouteController {
     private String metroMadisonFeedId;
 
     @GetMapping("/v1/average/allLines")
-    public ResponseEntity<LineGraphDataResponse> getDelayByAllLines(GraphOptions graphOptions) {
+    public ResponseEntity<Mono<LineGraphDataResponse>> getDelayByAllLines(GraphOptions graphOptions) {
         return ResponseEntity.ok(getDelayService.getAverageDelay(metroMadisonFeedId, graphOptions));
     }
 
     @GetMapping("/v1/graph/{type}/{feedId}")
-    public ResponseEntity<LineGraphDataResponse> getDelayByFeed(@PathVariable String feedId,
+    public ResponseEntity<Mono<LineGraphDataResponse>> getDelayByFeed(@PathVariable String feedId,
                                                                 @PathVariable String type,
                                                                 GraphOptions graphOptions) {
         return switch (type) {
@@ -40,12 +41,12 @@ public class DelayByRouteController {
     }
 
     @GetMapping("/v1/max/allLines")
-    public ResponseEntity<LineGraphDataResponse> getAverageDelayByAllLines(GraphOptions graphOptions) {
+    public ResponseEntity<Mono<LineGraphDataResponse>> getAverageDelayByAllLines(GraphOptions graphOptions) {
         return ResponseEntity.ok(getDelayService.getMaxDelayFor(metroMadisonFeedId, graphOptions));
     }
 
     @GetMapping("/v1/percent/allLines")
-    public ResponseEntity<LineGraphDataResponse> getPercentDelayByAllLines(GraphOptions graphOptions) {
+    public ResponseEntity<Mono<LineGraphDataResponse>> getPercentDelayByAllLines(GraphOptions graphOptions) {
         return ResponseEntity.ok(getDelayService.getPercentOnTimeFor(metroMadisonFeedId, graphOptions));
     }
 }
