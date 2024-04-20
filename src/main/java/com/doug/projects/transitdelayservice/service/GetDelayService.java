@@ -70,6 +70,19 @@ public class GetDelayService {
         return genericLineGraphConverter(feedId, graphOptions, ((routeTimestampList) -> RouteTimestampUtil.percentOnTime(routeTimestampList, lower, upper)));
     }
 
+    public LineGraphDataResponse getPercentOnTimeFor(String feedId, GraphOptions graphOptions) {
+        if (graphOptions.getLowerOnTimeThreshold() == null) {
+            graphOptions.setLowerOnTimeThreshold(-5);
+        }
+        if (graphOptions.getUpperOnTimeThreshold() == null) {
+            graphOptions.setUpperOnTimeThreshold(5);
+        }
+        return genericLineGraphConverter(feedId, graphOptions, ((routeTimestampList) ->
+                RouteTimestampUtil.percentOnTime(routeTimestampList,
+                        graphOptions.getLowerOnTimeThreshold(),
+                        graphOptions.getUpperOnTimeThreshold())));
+    }
+
     /**
      * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
      *
