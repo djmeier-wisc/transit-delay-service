@@ -43,27 +43,27 @@ public class GtfsRetryOnFailureService {
      * @param feedStatus the (presumably) failed status of the feed. Unless the feed is outdated or ACTIVE, we write the failure status
      * @param feed the feed to check against. If the status is some kind of failure, it will be used to remove the failed feed.
      */
-    @Async("retryTaskExecutor")
+    @Async
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed, int numRetries) {
         switch (feedStatus) {
             case ACTIVE -> {
                 //do nothing
             }
             case UNAUTHORIZED, DELETED, UNAVAILABLE -> {
-                updateFeedToStatus(feedStatus, feed);
+                updateFeedToStatus(feed, feedStatus);
             }
             case OUTDATED -> {
                 //if we've tried 3 times, turn feed status to OUTDATED
                 if (numRetries > 3) {
-                    updateFeedToStatus(feedStatus, feed);
+                    updateFeedToStatus(feed, OUTDATED);
                 }
                 sleepFor(5 * numRetries); //exponential backoff
 
                 //retry realtime feed first
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 10)
                         .join();
-                if (realtimeResult.getFeedStatus() != ACTIVE)
-                    return;
+                if (realtimeResult.getFeedStatus() == ACTIVE)
+                    updateFeedToStatus(feed, ACTIVE);
                 //if we failed to read realtime feed, re-poll static data
                 var staticResult = staticParserService.writeGtfsRoutesToDiskAsync(feed, 10)
                         .join();
@@ -72,17 +72,15 @@ public class GtfsRetryOnFailureService {
                     recheckFeedByStatus(OUTDATED, feed, ++numRetries);
                 }
                 staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
-                if (realtimeResult.getFeedStatus() != ACTIVE) {
-                    log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
-                    recheckFeedByStatus(OUTDATED, feed, ++numRetries);
-                }
+                log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
+                recheckFeedByStatus(OUTDATED, feed, ++numRetries);
             }
             case TIMEOUT -> {
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 10)
                         .join();
                 if (realtimeResult.getFeedStatus() != ACTIVE && numRetries > 3) {
                     log.error("TIMEOUT after retries - marking feed as unavailable");
-                    recheckFeedByStatus(UNAVAILABLE, feed, ++numRetries);
+                    updateFeedToStatus(feed, TIMEOUT);
                 } else {
                     recheckFeedByStatus(TIMEOUT, feed, ++numRetries);
                 }
@@ -98,7 +96,7 @@ public class GtfsRetryOnFailureService {
         }
     }
 
-    private void updateFeedToStatus(AgencyFeed.Status status, AgencyFeed feed) {
+    private void updateFeedToStatus(AgencyFeed feed, AgencyFeed.Status status) {
         log.error("Updating feed {} to {}", feed.getId(), status);
         feedRepository.removeAgencyFeed(feed);
         feed.setStatus(String.valueOf(status));

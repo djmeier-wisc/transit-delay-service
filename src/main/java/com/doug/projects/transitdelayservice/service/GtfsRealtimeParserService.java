@@ -138,7 +138,7 @@ public class GtfsRealtimeParserService {
                         .feed(feed)
                         .build();
             } else if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
-                log.error("Failed to download realtime data from \"{}\", resCode \"\"", realtimeUrl);
+                log.error("Failed to download realtime data from \"{}\", resCode \"\"", feedId);
                 return AgencyRealtimeResponse.builder()
                         .feed(feed)
                         .feedStatus(AgencyFeed.Status.UNAVAILABLE)

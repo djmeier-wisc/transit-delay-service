@@ -7,14 +7,11 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
-
-import java.util.concurrent.Executor;
 
 @SpringBootApplication
 @EnableScheduling
@@ -39,17 +36,6 @@ public class TransitDelayServiceApplication {
     @Bean
     public DynamoDbEnhancedAsyncClient provideAsyncEnhancedClient() {
         return DynamoDbEnhancedAsyncClient.create();
-    }
-
-    @Bean(name = "retryTaskExecutor")
-    public Executor transcodingPoolTaskExecutor() {
-        final ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(5);
-        executor.setQueueCapacity(500);
-        executor.setThreadNamePrefix("retry-");
-        executor.initialize();
-        return executor;
     }
 
     @Bean
