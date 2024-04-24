@@ -147,7 +147,10 @@ public class GtfsRealtimeParserService {
             return doRPCRequest(feed, feedId, realtimeUrl);
         } catch (IOException e) {
             log.error("Error reading realtime feed from id: {}, url: {}, message: {}", feedId, realtimeUrl, e.getMessage());
-            return AgencyRealtimeResponse.builder().feed(feed).feedStatus(AgencyFeed.Status.UNAVAILABLE).build();
+            return AgencyRealtimeResponse.builder()
+                    .feed(feed)
+                    .feedStatus(AgencyFeed.Status.TIMEOUT)
+                    .build();
         }
     }
 
