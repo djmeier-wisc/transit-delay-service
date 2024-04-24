@@ -13,6 +13,8 @@ import org.springframework.util.CollectionUtils;
 import java.util.Collections;
 import java.util.List;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
+
 /**
  * Used in the event of a failure when reading static data or realtime data.
  * Contains a queue of feeds needing retry
@@ -28,7 +30,7 @@ public class GtfsRetryOnFailureService {
     public List<AgencyRouteTimestamp> reCheckFailures(AgencyRealtimeResponse realtimeResponse) {
         AgencyFeed.Status feedStatus = realtimeResponse.getFeedStatus();
         AgencyFeed feed = realtimeResponse.getFeed();
-        recheckFeedByStatus(feedStatus, feed);
+        recheckFeedByStatus(feedStatus, feed, 0);
         if (CollectionUtils.isEmpty(realtimeResponse.getRouteTimestamps())) {
             return Collections.emptyList();
         }
@@ -41,43 +43,65 @@ public class GtfsRetryOnFailureService {
      * @param feedStatus the (presumably) failed status of the feed. Unless the feed is outdated or ACTIVE, we write the failure status
      * @param feed the feed to check against. If the status is some kind of failure, it will be used to remove the failed feed.
      */
-    @Async
-    private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
+    @Async("retryTaskExecutor")
+    private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed, int numRetries) {
         switch (feedStatus) {
             case ACTIVE -> {
                 //do nothing
             }
             case UNAUTHORIZED, DELETED, UNAVAILABLE -> {
-                log.error("Updating feed {} to {}", feed.getId(), feedStatus);
-                feedRepository.removeAgencyFeed(feed);
-                feed.setStatus(String.valueOf(feedStatus));
-                feedRepository.writeAgencyFeed(feed);
+                updateFeedToStatus(feedStatus, feed);
             }
             case OUTDATED -> {
-                var staticResult = staticParserService.writeGtfsRoutesToDiskAsync(feed, 240).join();
+                //if we've tried 3 times, turn feed status to OUTDATED
+                if (numRetries > 3) {
+                    updateFeedToStatus(feedStatus, feed);
+                }
+                sleepFor(5 * numRetries); //exponential backoff
+
+                //retry realtime feed first
+                var realtimeResult = realtimeParserService.convertFromAsync(feed, 10)
+                        .join();
+                if (realtimeResult.getFeedStatus() != ACTIVE)
+                    return;
+                //if we failed to read realtime feed, re-poll static data
+                var staticResult = staticParserService.writeGtfsRoutesToDiskAsync(feed, 10)
+                        .join();
                 if (!staticResult.isSuccess()) {
-                    log.error("Retried reading static feed, but failed. Marking feed as unavailable");
-                    recheckFeedByStatus(AgencyFeed.Status.UNAVAILABLE, feed);
+                    log.error("Retried reading static feed, but failed. Will retry");
+                    recheckFeedByStatus(OUTDATED, feed, ++numRetries);
                 }
                 staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    log.error("Sleeping interrupted for retry. Continuing...");
-                }
-                var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
-                if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
+                if (realtimeResult.getFeedStatus() != ACTIVE) {
                     log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
-                    recheckFeedByStatus(AgencyFeed.Status.UNAVAILABLE, feed);
+                    recheckFeedByStatus(OUTDATED, feed, ++numRetries);
                 }
             }
             case TIMEOUT -> {
-                var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
-                if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
-                    log.error("TIMEOUT - marking feed as unavailable");
-                    recheckFeedByStatus(AgencyFeed.Status.UNAVAILABLE, feed);
+                var realtimeResult = realtimeParserService.convertFromAsync(feed, 10)
+                        .join();
+                if (realtimeResult.getFeedStatus() != ACTIVE && numRetries > 3) {
+                    log.error("TIMEOUT after retries - marking feed as unavailable");
+                    recheckFeedByStatus(UNAVAILABLE, feed, ++numRetries);
+                } else {
+                    recheckFeedByStatus(TIMEOUT, feed, ++numRetries);
                 }
             }
         }
+    }
+
+    private void sleepFor(int seconds) {
+        try {
+            Thread.sleep(seconds * 1000L);
+        } catch (InterruptedException e) {
+            log.error("Sleeping interrupted for retry. Continuing...");
+        }
+    }
+
+    private void updateFeedToStatus(AgencyFeed.Status status, AgencyFeed feed) {
+        log.error("Updating feed {} to {}", feed.getId(), status);
+        feedRepository.removeAgencyFeed(feed);
+        feed.setStatus(String.valueOf(status));
+        feedRepository.writeAgencyFeed(feed);
     }
 }

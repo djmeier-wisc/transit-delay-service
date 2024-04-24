@@ -135,6 +135,10 @@ public class GtfsStaticRepository {
         return this.findAllRoutes(agencyId).map(l -> l.stream().map(GtfsStaticData::getRouteName).distinct().toList());
     }
 
+    private static boolean checkIdAndRouteName(GtfsStaticData staticData) {
+        return staticData != null && staticData.getId() != null && staticData.getRouteName() != null;
+    }
+
     public Map<String, String> mapRouteIdsToRouteName(String agencyId, List<String> routeIds) {
         if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(routeIds)) return Collections.emptyMap();
         List<String> uniqueRouteIds = routeIds.stream().distinct().toList();
@@ -142,7 +146,7 @@ public class GtfsStaticRepository {
             BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.ROUTE.getName())).build();
             return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
                     .flatMapIterable(p -> p.resultsForTable(table))
-                    .filter(Objects::nonNull)
+                    .filter(GtfsStaticRepository::checkIdAndRouteName)
                     .toStream();
         }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
     }
@@ -154,7 +158,7 @@ public class GtfsStaticRepository {
             BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.TRIP.getName())).build();
             return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
                     .flatMapIterable(p -> p.resultsForTable(table))
-                    .filter(Objects::nonNull)
+                    .filter(GtfsStaticRepository::checkIdAndRouteName)
                     .toStream();
         }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
     }

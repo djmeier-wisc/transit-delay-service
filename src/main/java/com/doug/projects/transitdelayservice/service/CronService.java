@@ -28,7 +28,7 @@ public class CronService {
     @Value("${doesRealtimeCronRun}")
     private Boolean doesRealtimeCronRun;
 
-    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
+    @Scheduled(fixedRate = 30, timeUnit = TimeUnit.DAYS)
     public void writeFeeds() {
         if (!doesAgencyCronRun)
             return;
