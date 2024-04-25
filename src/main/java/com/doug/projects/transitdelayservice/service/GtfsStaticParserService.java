@@ -3,11 +3,9 @@ package com.doug.projects.transitdelayservice.service;
 import com.doug.projects.transitdelayservice.entity.AgencyStaticStatus;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
-import com.doug.projects.transitdelayservice.entity.gtfs.csv.RoutesAttributes;
-import com.doug.projects.transitdelayservice.entity.gtfs.csv.StopAttributes;
-import com.doug.projects.transitdelayservice.entity.gtfs.csv.StopTimeAttributes;
-import com.doug.projects.transitdelayservice.entity.gtfs.csv.TripAttributes;
+import com.doug.projects.transitdelayservice.entity.gtfs.csv.*;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import com.doug.projects.transitdelayservice.util.TransitDateUtil;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvParser;
@@ -15,6 +13,7 @@ import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.zeroturnaround.zip.ZipUtil;
 
@@ -85,11 +84,16 @@ public class GtfsStaticParserService {
         return staticData;
     }
 
-    private static GtfsStaticData convert(StopTimeAttributes stopTimeAttributes, String agencyId, Map<String, String> tripIdToNameMap, Map<String, String> stopIdToNameMap) {
+    private static GtfsStaticData convert(StopTimeAttributes stopTimeAttributes,
+                                          String agencyId,
+                                          Map<String, String> tripIdToNameMap,
+                                          Map<String, String> stopIdToNameMap,
+                                          String timezone) {
         GtfsStaticData staticData = new GtfsStaticData();
         staticData.setAgencyType(agencyId, STOPTIME);
         staticData.setId(String.valueOf(stopTimeAttributes.getTripId()), stopTimeAttributes.getStopSequence());
-        staticData.setDepartureTime(stopTimeAttributes.getDepartureTime());
+        staticData.setDepartureTimestamp(TransitDateUtil.parseTimeAndApplyTimeZone(stopTimeAttributes.getDepartureTime(), timezone));
+        staticData.setArrivalTimestamp(TransitDateUtil.parseTimeAndApplyTimeZone(stopTimeAttributes.getArrivalTime(), timezone));
         staticData.setStopId(stopTimeAttributes.getStopId());
         staticData.setStopName(stopIdToNameMap.get(stopTimeAttributes.getStopId()));
         staticData.setRouteName(tripIdToNameMap.get(stopTimeAttributes.getTripId()));
@@ -99,7 +103,7 @@ public class GtfsStaticParserService {
     /**
      * Writes gtfs static data as .csv files to disk under /files.
      *
-     * @param feed the feed to download gtfs static data from
+     * @param feed           the feed to download gtfs static data from
      * @param timeoutSeconds the number of seconds until timeout. In the event of failure,
      * @return AgencyStaticStatus w/ success false if timeout or IO exception, success of true otherwise.
      * @implNote this may need to be forcibly timed out. some providers never return data, leading to thread starvation
@@ -138,18 +142,20 @@ public class GtfsStaticParserService {
         Map<String, String> routeIdToNameMap = new HashMap<>();
         Map<String, String> tripIdToNameMap = new HashMap<>();
         Map<String, String> stopIdToNameMap = new HashMap<>();
+        String agencyTZ = null;
         for (GtfsStaticData.TYPE value : GtfsStaticData.TYPE.values()) {
             File file = new File("files" + File.separator + agencyId + File.separator + value.getFileName());
             try {
                 switch (value) {
+                    case AGENCY -> agencyTZ = readTimezoneFromAgency(file);
                     case ROUTE ->
-                            readGtfsAndSaveToDb(agencyId, file, RoutesAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
+                            readGtfsAndSaveToDb(agencyId, file, RoutesAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap, agencyTZ);
                     case TRIP ->
-                            readGtfsAndSaveToDb(agencyId, file, TripAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
+                            readGtfsAndSaveToDb(agencyId, file, TripAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap, agencyTZ);
                     case STOPTIME ->
-                            readGtfsAndSaveToDb(agencyId, file, StopTimeAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
+                            readGtfsAndSaveToDb(agencyId, file, StopTimeAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap, agencyTZ);
                     case STOP ->
-                            readGtfsAndSaveToDb(agencyId, file, StopAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
+                            readGtfsAndSaveToDb(agencyId, file, StopAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap, agencyTZ);
                     default -> log.error("No case for type: {}", value);
                     //TODO consider shapes.txt, maybe add it in the future?
                 }
@@ -163,18 +169,38 @@ public class GtfsStaticParserService {
         log.info("All file read finished for id: {}", agencyId);
     }
 
+    private @Nullable String readTimezoneFromAgency(File file) {
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        try (MappingIterator<AgencyAttributes> attributesIterator = csvMapper
+                .readerWithSchemaFor(AgencyAttributes.class)
+                .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
+                .readValues(file)) {
+            while (attributesIterator.hasNext()) { //we presume all stopTimes in the files parsed are
+                String timezone = attributesIterator.next().getAgencyTimezone();
+                if (timezone != null) return timezone;
+            }
+        } catch (IOException e) {
+            log.error("Failed to read agency.csv file: {}", file.getName(), e);
+        }
+        return null;
+    }
+
     /**
      * Generic converter to read data from a single file (routes.txt, trips.txt, etc.) from file and write to dynamo.
      *
+     * @param <T>      an Attributes class used to map against .csv file passed in. Should be
      * @param agencyId the agencyId to write to dynamo from
      * @param file     the file to read from
      * @param clazz    instance of T
-     * @param <T>      an Attributes class used to map against .csv file passed in. Should be
+     * @param agencyTZ the agencyTimezone, in TZ identifier format used by GTFS
      */
     private <T> void readGtfsAndSaveToDb(String agencyId, File file, Class<T> clazz,
                                          Map<String, String> routeIdToNameMap,
                                          Map<String, String> tripIdToNameMap,
-                                         Map<String, String> stopIdToNameMap) {
+                                         Map<String, String> stopIdToNameMap,
+                                         String agencyTZ) {
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
         try (MappingIterator<T> attributesIterator = csvMapper
@@ -192,7 +218,7 @@ public class GtfsStaticParserService {
                 else if (attributes instanceof TripAttributes)
                     gtfsList.add(convert((TripAttributes) attributes, agencyId, routeIdToNameMap, tripIdToNameMap));
                 else if (attributes instanceof StopTimeAttributes)
-                    gtfsList.add(convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap));
+                    gtfsList.add(convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap, agencyTZ));
                 else {
                     //this shouldn't be possible if you code it right... famous last words
                     log.error("UNRECOGNIZED TYPE OF ATTRIBUTE, FAST FAIL.");

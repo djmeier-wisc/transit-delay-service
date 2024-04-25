@@ -4,6 +4,7 @@ import com.doug.projects.transitdelayservice.entity.AgencyRealtimeResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
+import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import com.google.transit.realtime.GtfsRealtime;
 import lombok.RequiredArgsConstructor;
@@ -45,31 +46,72 @@ public class GtfsRealtimeParserService {
     }
 
     @NotNull
-    private static AgencyRouteTimestamp getAgencyRouteTimestamp(String agencyId, Map.Entry<String, List<GtfsRealtime.TripUpdate>> entry, long timeStamp) {
+    private AgencyRouteTimestamp getAgencyRouteTimestamp(String agencyId, Map.Entry<String, List<GtfsRealtime.TripUpdate>> entry, long timeStamp) {
         String routeName = entry.getKey();
         List<GtfsRealtime.TripUpdate> tripUpdates = entry.getValue();
         AgencyRouteTimestamp agencyRouteTimestamp = new AgencyRouteTimestamp();
         agencyRouteTimestamp.setAgencyRoute(agencyId, routeName.replace(":", ""));
         agencyRouteTimestamp.setTimestamp(timeStamp);
-        agencyRouteTimestamp.setBusStates(adaptBusStatesFrom(tripUpdates));
+        agencyRouteTimestamp.setBusStates(adaptBusStatesFrom(agencyId, tripUpdates));
         return agencyRouteTimestamp;
     }
 
-    private static List<BusState> adaptBusStatesFrom(List<GtfsRealtime.TripUpdate> tripUpdate) {
-        return tripUpdate.stream().map(GtfsRealtimeParserService::adaptBusStateFrom).toList();
+    private List<BusState> adaptBusStatesFrom(String feedId, List<GtfsRealtime.TripUpdate> tripUpdates) {
+        return tripUpdates.stream().map(tripUpdate -> this.adaptBusStateFrom(feedId, tripUpdate)).toList();
     }
 
     @NotNull
-    private static BusState adaptBusStateFrom(GtfsRealtime.TripUpdate tu) {
+    private BusState adaptBusStateFrom(String feedId, GtfsRealtime.TripUpdate tripUpdate) {
         BusState busState = new BusState();
-        busState.setTripId(tu.getTrip().getTripId());
-        if (tu.getStopTimeUpdateCount() <= 0) {
-            busState.setDelay(tu.getDelay());
+        busState.setTripId(tripUpdate.getTrip().getTripId());
+        if (tripUpdate.getStopTimeUpdateCount() <= 0) {
+            busState.setDelay(tripUpdate.getDelay());
             return busState;
         }
-        busState.setDelay(tu.getStopTimeUpdate(0).getDeparture().getDelay());
-        busState.setClosestStopId(tu.getStopTimeUpdate(0).getStopId());
+        busState.setDelay(getDelay(feedId, tripUpdate));
+        busState.setClosestStopId(tripUpdate.getStopTimeUpdate(0).getStopId());
         return busState;
+    }
+
+    /**
+     * This method extracts delay from a tripUpdate. Note that
+     *
+     * @param feedId
+     * @param tu
+     * @return
+     */
+    private int getDelay(String feedId, GtfsRealtime.TripUpdate tu) {
+        var currStopTimeUpdate = tu.getStopTimeUpdate(0);
+        var arrival = currStopTimeUpdate.getArrival();
+        var departure = currStopTimeUpdate.getDeparture();
+        if (arrival.hasDelay()) {
+            return arrival.getDelay();
+        } else if (departure.hasDelay()) {
+            return departure.getDelay();
+        }
+        return extractDiffTimeFromDb(feedId, tu, currStopTimeUpdate, departure, arrival);
+    }
+
+    private int extractDiffTimeFromDb(String feedId, GtfsRealtime.TripUpdate tu, GtfsRealtime.TripUpdate.StopTimeUpdate currStopTimeUpdate, GtfsRealtime.TripUpdate.StopTimeEvent departure, GtfsRealtime.TripUpdate.StopTimeEvent arrival) {
+        if (currStopTimeUpdate.hasDeparture() && departure.hasTime()) {
+            var actualDeparture = departure.getTime();
+            var expectedDeparture = repository
+                    .getStopTimeById(feedId, tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence())
+                    .mapNotNull(GtfsStaticData::getDepartureTimestamp)
+                    .blockOptional();
+            if (expectedDeparture.isEmpty()) return 0;
+            return (int) ((actualDeparture - expectedDeparture.get()) / 1000);
+        } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime()) {
+            var actualArrival = arrival.getTime();
+            var expectedArrival = repository
+                    .getStopTimeById(feedId, tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence())
+                    .mapNotNull(GtfsStaticData::getArrivalTimestamp)
+                    .blockOptional();
+            if (expectedArrival.isEmpty()) return 0;
+            return (int) ((actualArrival - expectedArrival.get()) / 1000);
+        } else {
+            return 0;
+        }
     }
 
     @NotNull
@@ -115,7 +157,7 @@ public class GtfsRealtimeParserService {
     /**
      * Parses the realTime feed from AgencyFeed.
      *
-     * @param feed        the feed to try to read from the realtime url
+     * @param feed the feed to try to read from the realtime url
      * @return an AgencyRealTimeResponse.
      * <p>In the event of failure, status will be set and routeTimestamps field may be null or empty</p>
      */

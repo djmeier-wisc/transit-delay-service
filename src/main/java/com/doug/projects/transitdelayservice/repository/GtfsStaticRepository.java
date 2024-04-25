@@ -24,12 +24,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
 
 @Repository
 @Slf4j
 public class GtfsStaticRepository {
     private final DynamoDbEnhancedAsyncClient enhancedAsyncClient;
     private final DynamoDbAsyncTable<GtfsStaticData> table;
+
 
     public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient) {
         this.enhancedAsyncClient = enhancedAsyncClient;
@@ -182,5 +184,10 @@ public class GtfsStaticRepository {
                                 .filter(route -> route != null && route.getRouteName() != null && route.getRouteSortOrder() != null)
                                 .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder, (first, second) -> second)))
                 .toFuture();
+    }
+
+    public Mono<GtfsStaticData> getStopTimeById(String feedId, String tripId, Integer stopSequence) {
+        var key = Key.builder().partitionValue(tripId + ":" + stopSequence).sortValue(feedId + ":" + STOPTIME.getName()).build();
+        return Mono.fromCompletionStage(table.getItem(key));
     }
 }

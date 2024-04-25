@@ -1,10 +1,10 @@
 package com.doug.projects.transitdelayservice.util;
 
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.AbstractMap;
-
+import java.util.Date;
+import java.util.Optional;
 public class TransitDateUtil {
     public static long getMidnightSixDaysAgo() {
         LocalDateTime ldt = LocalDateTime.now();
@@ -27,5 +27,19 @@ public class TransitDateUtil {
                     startTime + (long) (distance * unit), startTime + (long) (distance * (unit + 1)));
         }
         return startAndEndTimesList;
+    }
+
+    public static long parseTimeAndApplyTimeZone(String timeString, String timeZoneString) {
+        // Parse the time string
+        LocalDateTime localDateTime = LocalDateTime.parse(timeString, DateTimeFormatter.ofPattern("H:mm:ss"));
+        // Get the time zone
+        ZoneId timeZone = ZoneId.of(timeZoneString);
+        // Create a ZonedDateTime by combining time and time zone
+        var time = ZonedDateTime.of(localDateTime, timeZone);
+        return time.toEpochSecond();
+    }
+
+    public static Optional<Date> parseDepartureTime(long departureTime) {
+        return Optional.of(new Date(departureTime * 1000));
     }
 }

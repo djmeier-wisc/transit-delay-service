@@ -15,4 +15,6 @@ public class StopTimeAttributes {
     private String stopId;
     @JsonProperty("departure_time")
     private String departureTime;
+    @JsonProperty("arrival_time")
+    private String arrivalTime;
 }
