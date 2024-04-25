@@ -54,7 +54,7 @@ public class GtfsRetryOnFailureService {
             }
             case OUTDATED -> {
                 //if we've tried 3 times, turn feed status to OUTDATED
-                if (numRetries > 3) {
+                if (numRetries > 1) {
                     updateFeedToStatus(feed, OUTDATED);
                 }
                 sleepFor(5 * numRetries); //exponential backoff
@@ -62,8 +62,10 @@ public class GtfsRetryOnFailureService {
                 //retry realtime feed first
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 10)
                         .join();
-                if (realtimeResult.getFeedStatus() == ACTIVE)
+                if (realtimeResult.getFeedStatus() == ACTIVE) {
                     updateFeedToStatus(feed, ACTIVE);
+                    return;
+                }
                 //if we failed to read realtime feed, re-poll static data
                 var staticResult = staticParserService.writeGtfsRoutesToDiskAsync(feed, 10)
                         .join();
@@ -78,7 +80,7 @@ public class GtfsRetryOnFailureService {
             case TIMEOUT -> {
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 10)
                         .join();
-                if (realtimeResult.getFeedStatus() != ACTIVE && numRetries > 3) {
+                if (realtimeResult.getFeedStatus() != ACTIVE && numRetries > 1) {
                     log.error("TIMEOUT after retries - marking feed as unavailable");
                     updateFeedToStatus(feed, TIMEOUT);
                 } else {
