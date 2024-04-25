@@ -58,7 +58,7 @@ public class LineGraphUtil {
         lineGraphDataList.forEach(lineGraphData -> {
             var color = colorMap.get(lineGraphData.getLineLabel());
             //by accident, if color is not provided in gtfs file, we put #null in the db. Whoops. This fixes that
-            if ("#null".equalsIgnoreCase(color)) {
+            if ("#null".equalsIgnoreCase(color) || "#".equalsIgnoreCase(color)) {
                 color = null;
             }
             lineGraphData.setBorderColor(color);
