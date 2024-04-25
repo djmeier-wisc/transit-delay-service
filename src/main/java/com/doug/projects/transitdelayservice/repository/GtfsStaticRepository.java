@@ -24,6 +24,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
+import static java.util.Comparator.*;
+import static org.apache.commons.lang3.StringUtils.isNumeric;
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @Repository
 @Slf4j
@@ -117,8 +120,8 @@ public class GtfsStaticRepository {
         //RxJava stuff. Convert the list query to a list of routeName, get distinct, and return as list.
         return Flux.concat(sdkPublisher)
                 .flatMapIterable(Page::items)
-                .sort(Comparator.comparing(GtfsStaticData::getRouteSortOrder, Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(GtfsStaticData::getRouteName, Comparator.nullsLast(Comparator.naturalOrder())))
+                .sort(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(GtfsStaticData::getRouteName, nullsLast(Comparator.naturalOrder())))
                 .filter(gtfsStaticData -> Objects.nonNull(gtfsStaticData.getRouteName()))
                 .distinct()
                 .collectList();
@@ -127,12 +130,20 @@ public class GtfsStaticRepository {
     /**
      * Finds all route names for a particular agencyId.
      * Note that this can either be routeShortName or routeLongName, depending on which was specified in routes.txt file.
+     * Sorts by routeSortOrder, otherwise, sorts by
      *
      * @param agencyId the agencyId to search the DB for
      * @return the routeNames associated with that agency.
      */
     public Mono<List<String>> findAllRouteNames(String agencyId) {
-        return this.findAllRoutes(agencyId).map(l -> l.stream().map(GtfsStaticData::getRouteName).distinct().toList());
+        return this.findAllRoutes(agencyId)
+                .map(gtfsStaticData -> gtfsStaticData.stream()
+                        .sorted(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(naturalOrder()))
+                                .thenComparing(g -> isNumeric(g.getRouteName()))
+                                .thenComparingInt(g -> toInt(g.getRouteName())))
+                        .map(GtfsStaticData::getRouteName)
+                        .distinct()
+                        .toList());
     }
 
     private static boolean checkIdAndRouteName(GtfsStaticData staticData) {
