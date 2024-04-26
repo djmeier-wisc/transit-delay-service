@@ -7,10 +7,11 @@ import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.TimeZone;
+import java.util.*;
+
+import static java.util.Comparator.*;
+import static org.apache.commons.lang3.StringUtils.isNumeric;
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @Component
 @RequiredArgsConstructor
@@ -45,12 +46,12 @@ public class LineGraphUtil {
     }
 
     public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDataList) {
-        var sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId).join();
-        lineGraphDataList.sort((o1, o2) -> {
-            Integer o1Order = sortOrderMap.getOrDefault(o1.getLineLabel(), -1);
-            Integer o2Order = sortOrderMap.getOrDefault(o2.getLineLabel(), -1);
-            return Integer.compare(o1Order, o2Order);
-        });
+        Map<String, Integer> sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId)
+                .join();
+        lineGraphDataList.sort(comparing((LineGraphData data) -> sortOrderMap.get(data.getLineLabel()),
+                nullsLast(naturalOrder())).thenComparing((LineGraphData data) -> isNumeric(data.getLineLabel()),
+                        nullsLast(naturalOrder()))
+                .thenComparing((LineGraphData data) -> toInt(data.getLineLabel()), nullsLast(naturalOrder())));
     }
 
     public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {
