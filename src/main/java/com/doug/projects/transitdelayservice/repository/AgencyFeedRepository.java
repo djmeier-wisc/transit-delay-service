@@ -10,12 +10,15 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.model.Page;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
 import software.amazon.awssdk.enhanced.dynamodb.model.WriteBatch;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.ID_INDEX;
 
 @Repository
 @Slf4j
@@ -76,6 +79,14 @@ public class AgencyFeedRepository {
                 .join();
     }
 
+    public Flux<AgencyFeed> getFeedFluxByStatus(AgencyFeed.Status status) {
+        return Flux.concat(table
+                .query(q ->
+                        q.queryConditional(
+                                QueryConditional.keyEqualTo(k -> k.partitionValue(status.toString()))))
+                .items());
+    }
+
     public List<AgencyFeed> getAllAgencyFeeds() {
         return Flux.concat(table.scan().items())
                 .collectList()
@@ -92,8 +103,9 @@ public class AgencyFeedRepository {
     }
 
     public Mono<AgencyFeed> getAgencyFeedById(String feedId) {
-        return Flux.concat(table.scan().items())
-                .filter(feed -> feedId.equals(feed.getId()))
+        QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(feedId).build());
+        return Flux.concat(table.index(ID_INDEX).query(queryConditional))
+                .flatMapIterable(Page::items)
                 .next();
     }
 }
