@@ -13,6 +13,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
 @SpringBootApplication
 @EnableScheduling
 @EnableWebFlux
@@ -47,5 +50,10 @@ public class TransitDelayServiceApplication {
                                         .defaultCodecs().maxInMemorySize((1000 * 1000 * 1024))).build())
                 .codecs(clientCodecConfigurer -> clientCodecConfigurer.defaultCodecs()
                         .maxInMemorySize(1000 * 1000 * 1024)).build();
+    }
+
+    @Bean("realtime")
+    public Executor realtimeExecutor() {
+        return Executors.newFixedThreadPool(10);
     }
 }

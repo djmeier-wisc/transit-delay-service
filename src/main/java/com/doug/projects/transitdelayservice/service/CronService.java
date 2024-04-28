@@ -4,11 +4,13 @@ import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
@@ -22,6 +24,8 @@ public class CronService {
     private final GtfsRealtimeParserService rtResponseService;
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsRetryOnFailureService retryOnFailureService;
+    @Qualifier("realtime")
+    private final Executor realtimeExecutor;
     @Value("${doesAgencyCronRun}")
     private Boolean doesAgencyCronRun;
     @Value("${doesRealtimeCronRun}")
@@ -57,8 +61,8 @@ public class CronService {
                         .stream()
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
-                                .thenApply(retryOnFailureService::reCheckFailures)
-                                .thenAccept(routeTimestampRepository::saveAll))
+                                        .thenApplyAsync(retryOnFailureService::reCheckFailures, realtimeExecutor)
+                                        .thenAcceptAsync(routeTimestampRepository::saveAll, realtimeExecutor))
                         .toArray(CompletableFuture[]::new);
 
         CompletableFuture.allOf(allFutures).join();

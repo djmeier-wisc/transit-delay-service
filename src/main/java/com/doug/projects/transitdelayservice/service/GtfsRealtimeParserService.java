@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -33,6 +35,8 @@ public class GtfsRealtimeParserService {
     public static final List<GtfsRealtime.TripDescriptor.ScheduleRelationship> ignorableScheduleRelationshipEnums =
             List.of(CANCELED);
     private final GtfsStaticRepository repository;
+    @Qualifier("realtime")
+    private final Executor realtimeExecutor;
 
     /**
      * Validate the required fields for Entity mapping
@@ -108,7 +112,7 @@ public class GtfsRealtimeParserService {
     public CompletableFuture<AgencyRealtimeResponse> convertFromAsync(AgencyFeed feed, int timeoutSeconds) {
         var timeoutFailure = AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.TIMEOUT).feed(feed).build();
         return CompletableFuture
-                .supplyAsync(() -> convertFromSync(feed))
+                .supplyAsync(() -> convertFromSync(feed), realtimeExecutor)
                 .completeOnTimeout(timeoutFailure, timeoutSeconds, TimeUnit.SECONDS);
     }
 
