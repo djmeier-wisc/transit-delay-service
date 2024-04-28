@@ -3,6 +3,7 @@ package com.doug.projects.transitdelayservice.entity.dynamodb;
 import lombok.*;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
 @DynamoDbBean
@@ -11,9 +12,10 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 @NoArgsConstructor
 @Builder
 public class AgencyFeed {
+    public static final String ID_INDEX = "id-index";
     @Getter(onMethod = @__(@DynamoDbPartitionKey))
     private String status;
-    @Getter(onMethod = @__(@DynamoDbSortKey))
+    @Getter(onMethod = @__({@DynamoDbSortKey, @DynamoDbSecondaryPartitionKey(indexNames = ID_INDEX)}))
     private String id;
     private String name;
     private String realTimeUrl;

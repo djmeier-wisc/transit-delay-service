@@ -14,6 +14,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
 import static org.mockito.Mockito.*;
@@ -32,6 +34,7 @@ class CronServiceTest {
     private AgencyRouteTimestampRepository routeTimestampRepository;
     @Mock
     private GtfsRetryOnFailureService retryOnFailureService;
+    private final Executor rtExec = Executors.newSingleThreadExecutor();
 
     private static List<AgencyFeed> getAgencyFeedList() {
         return List.of(getAgencyFeedActive());
@@ -70,6 +73,7 @@ class CronServiceTest {
                 .thenReturn(getAgencyFeedList());
         when(rtResponseService.convertFromAsync(eq(getAgencyFeedActive()), anyInt()))
                 .thenReturn(CompletableFuture.completedFuture(getResponse()));
+        ReflectionTestUtils.setField(cronService, "realtimeExecutor", rtExec);
         cronService.writeGtfsRealtimeData();
         verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatus(eq(ACTIVE));
         verify(rtResponseService, times(1)).convertFromAsync(eq(getAgencyFeedActive()), anyInt());

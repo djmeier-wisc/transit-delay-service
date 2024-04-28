@@ -6,7 +6,6 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestam
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
@@ -37,19 +36,26 @@ public class GtfsRetryOnFailureService {
         return realtimeResponse.getRouteTimestamps();
     }
 
+    private static void sleepFor(int seconds) {
+        try {
+            Thread.sleep(seconds * 1000L);
+        } catch (InterruptedException e) {
+            log.error("Sleeping interrupted for retry. Continuing...");
+        }
+    }
+
     /**
      * Recursive retry method. Feeds get one retry on "OUTDATED" status
      *
      * @param feedStatus the (presumably) failed status of the feed. Unless the feed is outdated or ACTIVE, we write the failure status
      * @param feed the feed to check against. If the status is some kind of failure, it will be used to remove the failed feed.
      */
-    @Async
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
         switch (feedStatus) {
             case ACTIVE -> {
                 //do nothing
             }
-            case UNAUTHORIZED, DELETED, UNAVAILABLE -> {
+            case UNAUTHORIZED, DELETED -> {
                 updateFeedToStatus(feed, feedStatus);
             }
             case OUTDATED -> {
@@ -59,18 +65,15 @@ public class GtfsRetryOnFailureService {
                     updateFeedToStatus(feed, UNAVAILABLE);
                 }
                 staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    log.error("Sleeping interrupted for retry. Continuing...");
-                }
+                sleepFor(5);
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
                 if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
                     log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
                     updateFeedToStatus(feed, OUTDATED);
                 }
             }
-            case TIMEOUT -> {
+            case TIMEOUT, UNAVAILABLE -> {
+                sleepFor(5);
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
                 if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
                     log.error("TIMEOUT - marking feed as unavailable");
