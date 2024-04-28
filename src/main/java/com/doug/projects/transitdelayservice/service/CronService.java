@@ -5,7 +5,6 @@ import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepo
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -49,7 +48,6 @@ public class CronService {
      * Done asynchronously to avoid blocking scheduler thread.
      */
     @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
-    @Async
     public void writeGtfsRealtimeData() {
         if (!doesRealtimeCronRun)
             return;
