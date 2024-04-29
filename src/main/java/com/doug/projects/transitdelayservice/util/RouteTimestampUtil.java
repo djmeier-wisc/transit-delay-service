@@ -37,7 +37,7 @@ public class RouteTimestampUtil {
 
     @NotNull
     private static IntStream getDelayStream(AgencyRouteTimestamp rt) {
-        return rt.getBusStatesCopyList().stream().mapToInt(BusState::getDelay);
+        return rt.getBusStatesCopyList().stream().filter(busState -> Objects.nonNull(busState.getDelay())).mapToInt(BusState::getDelay);
     }
 
     public static Double medianDelayInMinutes(List<AgencyRouteTimestamp> routeTimestampList) {

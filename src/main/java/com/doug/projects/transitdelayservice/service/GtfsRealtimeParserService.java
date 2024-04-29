@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.isRedirect;
 import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.CANCELED;
+import static org.apache.commons.lang3.ObjectUtils.isEmpty;
 
 @Service
 @RequiredArgsConstructor
@@ -122,19 +123,19 @@ public class GtfsRealtimeParserService {
         if (currStopTimeUpdate.hasDeparture() && departure.hasTime()) {
             var actualDeparture = departure.getTime();
             var expectedDeparture = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-            if (expectedDeparture.isEmpty() || timezone.isEmpty()) {
-                return 0;
+            if (isEmpty(expectedDeparture) || isEmpty(timezone) || expectedDeparture.isEmpty()) {
+                return null;
             }
             return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedDeparture.get(), actualDeparture, timezone);
         } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime()) {
             var actualArrival = arrival.getTime();
             var expectedArrival = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-            if (expectedArrival.isEmpty() || timezone.isEmpty()) {
-                return 0;
+            if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
+                return null;
             }
             return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone);
         } else {
-            return 0;
+            return null;
         }
     }
 
