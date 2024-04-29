@@ -21,6 +21,7 @@ public class AgencyFeed {
     private String realTimeUrl;
     private String staticUrl;
     private String state;
+    private String timezone;
 
     public enum Status {
         ACTIVE("ACT"),

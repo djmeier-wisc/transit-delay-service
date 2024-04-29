@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.AbstractMap;
 
+import static com.doug.projects.transitdelayservice.util.TransitDateUtil.calculateTimeDifferenceInSeconds;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class TransitDateUtilTest {
@@ -45,5 +46,17 @@ class TransitDateUtilTest {
             assertEquals(expectedStart, result[unit].getKey(), "Start time for unit " + unit + " is incorrect");
             assertEquals(expectedEnd, result[unit].getValue(), "End time for unit " + unit + " is incorrect");
         }
+    }
+
+    @Test
+    void testCalculateTimeDifferenceInSeconds() {
+        long difference = calculateTimeDifferenceInSeconds("17:09:26", 1714342166, "America/Chicago");
+        assertEquals(0, difference);
+        long timeAfter = calculateTimeDifferenceInSeconds("17:08:26", 1714342166, "America/Chicago");
+        assertEquals(60, timeAfter);
+        long timeBefore = calculateTimeDifferenceInSeconds("17:10:26", 1714342166, "America/Chicago");
+        assertEquals(-60, timeBefore);
+        long newTZ = calculateTimeDifferenceInSeconds("15:09:26", 1714342166, "America/Los_Angeles");
+        assertEquals(0, newTZ);
     }
 }
