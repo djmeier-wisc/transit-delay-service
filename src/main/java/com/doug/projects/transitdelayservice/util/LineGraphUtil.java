@@ -10,7 +10,6 @@ import java.time.ZoneId;
 import java.util.*;
 
 import static java.util.Comparator.*;
-import static org.apache.commons.lang3.StringUtils.isNumeric;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @Component
@@ -45,13 +44,50 @@ public class LineGraphUtil {
         return lineGraphData;
     }
 
+    /**
+     * Parses the lineLabel as an int as much as possible (as many chars are numerical are treated as a number.)
+     * IE O, OA, 1, 1B
+     *
+     * @param string the lineGraphLabel to parse.
+     * @return the number of chars that were numbers, or 0
+     */
+    public static int parseFirstPartInt(String string) {
+        int index = 0;
+        while (index < string.length() && Character.isDigit(string.charAt(index))) {
+            index++;
+        }
+        if (index == 0) {
+            return -1;
+        }
+        // Parse the first part of the string as a number.
+        return toInt(string.substring(0, index));
+    }
+
+    /**
+     * Parses the lineLabel as an int as much as possible from the end (as many chars are numerical are treated as a number.)
+     * IE B1, B2, B4
+     *
+     * @param string the lineGraphLabel to parse.
+     * @return the number of chars that were numbers, or 0
+     */
+    public static int parseLastPartInt(String string) {
+        int index = string.length() - 1;
+        while (index > 0 && Character.isDigit(string.charAt(index))) {
+            index--;
+        }
+        // Parse the first part of the string as a number.
+        return toInt(string.substring(index, string.length() - 1));
+    }
+
     public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDataList) {
         Map<String, Integer> sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId)
                 .join();
-        lineGraphDataList.sort(comparing((LineGraphData data) -> sortOrderMap.get(data.getLineLabel()),
-                nullsLast(naturalOrder())).thenComparing((LineGraphData data) -> isNumeric(data.getLineLabel()),
-                        nullsLast(naturalOrder()))
-                .thenComparing((LineGraphData data) -> toInt(data.getLineLabel()), nullsLast(naturalOrder())));
+        lineGraphDataList.sort(
+                comparing((LineGraphData data) -> sortOrderMap.get(data.getLineLabel()), nullsLast(naturalOrder()))
+                        .thenComparing((LineGraphData d) -> parseFirstPartInt(d.getLineLabel()), nullsLast(naturalOrder()))
+                        .thenComparing((LineGraphData d) -> parseLastPartInt(d.getLineLabel()), nullsLast(naturalOrder()))
+                        .thenComparing(LineGraphData::getLineLabel, nullsLast(naturalOrder()))
+        );
     }
 
     public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {

@@ -124,4 +124,18 @@ public class AgencyRouteTimestampRepository {
         return Flux.merge(routeStream)
                 .collect(groupByRouteNameAndSortByTimestamp());
     }
+
+    public Flux<AgencyRouteTimestamp> getRouteTimestampsBy(long startTime, long endTime, String routeName, String feedId) {
+        Key lowerBound = Key.builder()
+                .partitionValue(createKey(feedId, routeName))
+                .sortValue(startTime)
+                .build();
+        Key upperBound = Key.builder()
+                .partitionValue(createKey(feedId, routeName))
+                .sortValue(endTime)
+                .build();
+        QueryConditional query = QueryConditional.sortBetween(lowerBound, upperBound);
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder().queryConditional(query).build();
+        return Flux.merge(table.query(request).items());
+    }
 }

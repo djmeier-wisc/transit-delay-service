@@ -23,11 +23,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_ID_INDEX;
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
+import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseFirstPartInt;
+import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseLastPartInt;
 import static java.util.Comparator.*;
-import static org.apache.commons.lang3.StringUtils.isNumeric;
-import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @Repository
 @Slf4j
@@ -141,8 +142,9 @@ public class GtfsStaticRepository {
         return this.findAllRoutes(agencyId)
                 .map(gtfsStaticData -> gtfsStaticData.stream()
                         .sorted(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(naturalOrder()))
-                                .thenComparing(g -> isNumeric(g.getRouteName()))
-                                .thenComparingInt(g -> toInt(g.getRouteName())))
+                                .thenComparing((GtfsStaticData d) -> parseFirstPartInt(d.getRouteName()), nullsLast(naturalOrder()))
+                                .thenComparing((GtfsStaticData d) -> parseLastPartInt(d.getRouteName()), nullsLast(naturalOrder()))
+                                .thenComparing(GtfsStaticData::getRouteName, nullsLast(naturalOrder())))
                         .map(GtfsStaticData::getRouteName)
                         .distinct()
                         .toList());
@@ -229,5 +231,12 @@ public class GtfsStaticRepository {
                     BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
                     return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
                 });
+    }
+
+    public Flux<GtfsStaticData> getStopTimes(String feedId, List<String> trips) {
+        return Flux.fromIterable(trips).flatMap(trip -> {
+            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + STOPTIME).sortValue(trip).build());
+            return Flux.from(table.index(AGENCY_TYPE_ID_INDEX).query(queryConditional).flatMapIterable(Page::items));
+        });
     }
 }

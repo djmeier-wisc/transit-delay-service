@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseFirstPartInt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
@@ -82,5 +83,12 @@ class LineGraphUtilTest {
         lineGraphData.setData(Arrays.asList(1.0, 2.0, 3.0));
         lineGraphData.setBorderColor("#FFFFFF");
         return lineGraphData;
+    }
+
+    @Test
+    void testPartialInt() {
+        assertEquals(0, parseFirstPartInt("0A"));
+        assertEquals(0, parseFirstPartInt("oA"));
+        assertEquals(14, parseFirstPartInt(""));
     }
 }

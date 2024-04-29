@@ -4,23 +4,21 @@ import lombok.Data;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.*;
 
 @Data
 @DynamoDbBean
 public class GtfsStaticData {
     public static final String AGENCY_TYPE_INDEX = "agencyType-index";
+    public static final String AGENCY_TYPE_ID_INDEX = "agencyType-id-index";
     //{agency_id}:{type}
     @Getter(onMethod = @__({@DynamoDbSortKey,
-            @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX})}))
+            @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX, AGENCY_TYPE_ID_INDEX})}))
     private String agencyType;
     //route_id, trip_id, trip_id:stop_sequence (for stopTime), stop_id
     //although unintuitive, this is the PK to prevent hot partitions
     //read indexes will be needed to query this data
-    @Getter(onMethod = @__({@DynamoDbPartitionKey}))
+    @Getter(onMethod = @__({@DynamoDbPartitionKey, @DynamoDbSecondarySortKey(indexNames = AGENCY_TYPE_ID_INDEX)}))
     private String id;
     //used for trips and routes
     private String routeName;
