@@ -1,10 +1,8 @@
 package com.doug.projects.transitdelayservice.util;
 
 import java.time.*;
-import java.time.format.DateTimeFormatter;
 import java.util.AbstractMap;
-import java.util.Date;
-import java.util.Optional;
+
 public class TransitDateUtil {
     public static long getMidnightSixDaysAgo() {
         LocalDateTime ldt = LocalDateTime.now();
@@ -29,17 +27,20 @@ public class TransitDateUtil {
         return startAndEndTimesList;
     }
 
-    public static long parseTimeAndApplyTimeZone(String timeString, String timeZoneString) {
-        // Parse the time string
-        LocalDateTime localDateTime = LocalDateTime.parse(timeString, DateTimeFormatter.ofPattern("H:mm:ss"));
-        // Get the time zone
-        ZoneId timeZone = ZoneId.of(timeZoneString);
-        // Create a ZonedDateTime by combining time and time zone
-        var time = ZonedDateTime.of(localDateTime, timeZone);
-        return time.toEpochSecond();
-    }
-
-    public static Optional<Date> parseDepartureTime(long departureTime) {
-        return Optional.of(new Date(departureTime * 1000));
+    /**
+     * Performs actualTime - expectedTime.
+     * For example, if actualTime is 12:32 and expectedTime is 12:25, this would return 7 (mins) * 60 (seconds in min)
+     *
+     * @param expectedTime    The expected arrival/departure of a bus, in format H:mm:ss
+     * @param actualTimestamp The actual arrival/departure time of a bus, in epoch seconds
+     * @param timeZoneId      The timezone to parse this in, IE "America/Chicago"
+     * @return the number of seconds difference.
+     */
+    public static long calculateTimeDifferenceInSeconds(String expectedTime, long actualTimestamp, String timeZoneId) throws DateTimeException {
+        ZoneId timezone = ZoneId.of(timeZoneId);
+        LocalTime time = LocalTime.parse(expectedTime);
+        LocalDate date = LocalDate.ofInstant(Instant.ofEpochSecond(actualTimestamp), timezone);
+        ZonedDateTime zonedDateTime = ZonedDateTime.of(date, time, timezone);
+        return actualTimestamp - zonedDateTime.toEpochSecond();
     }
 }

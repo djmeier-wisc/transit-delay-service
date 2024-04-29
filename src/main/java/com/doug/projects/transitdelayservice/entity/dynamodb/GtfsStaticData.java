@@ -26,10 +26,8 @@ public class GtfsStaticData {
     private String routeName;
     private String routeColor;
     private Integer routeSortOrder;
-    @Deprecated
     private String departureTime;
-    private Long departureTimestamp;
-    private Long arrivalTimestamp;
+    private String arrivalTime;
     private String stopName;
     private String stopId;
     private Double stopLat;

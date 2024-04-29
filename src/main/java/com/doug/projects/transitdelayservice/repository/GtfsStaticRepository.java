@@ -24,10 +24,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
 import static java.util.Comparator.*;
 import static org.apache.commons.lang3.StringUtils.isNumeric;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
 
 @Repository
 @Slf4j
@@ -200,5 +200,34 @@ public class GtfsStaticRepository {
     public Mono<GtfsStaticData> getStopTimeById(String feedId, String tripId, Integer stopSequence) {
         var key = Key.builder().partitionValue(tripId + ":" + stopSequence).sortValue(feedId + ":" + STOPTIME.getName()).build();
         return Mono.fromCompletionStage(table.getItem(key));
+    }
+
+    /**
+     * Maps tripId and stopSequence to their respective departureTime and arrivalTime in the DB.
+     *
+     * @param feedId                     the feedId used to make database calls
+     * @param tripsWithoutDelayAttribute the list of tripIds and their associated stopSequence.
+     *                                   This is a map to prevent issues with making multiple calls for a single tripId,
+     *                                   which (should) be redundant...
+     *                                   we only store one tripId in the routeTimestamp db in the busstates list.
+     * @return a map from tripId to stopSequence to arrival/departure time
+     */
+    public Flux<GtfsStaticData> getTripMapFor(String feedId, Map<String, Integer> tripsWithoutDelayAttribute) {
+        return Flux.fromIterable(DynamoUtils.chunkList(new ArrayList<>(tripsWithoutDelayAttribute.entrySet()), 100))
+                .flatMap(chunkedList -> {
+                    List<ReadBatch> readBatches = chunkedList
+                            .stream()
+                            .map(e -> ReadBatch.builder(GtfsStaticData.class)
+                                    .addGetItem(Key
+                                            .builder()
+                                            .partitionValue(e.getKey() + ":" + e.getValue())
+                                            .sortValue(feedId + ":" + STOPTIME)
+                                            .build())
+                                    .mappedTableResource(table)
+                                    .build())
+                            .toList();
+                    BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
+                    return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
+                });
     }
 }
