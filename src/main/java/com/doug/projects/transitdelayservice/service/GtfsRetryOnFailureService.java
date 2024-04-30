@@ -40,6 +40,7 @@ public class GtfsRetryOnFailureService {
         try {
             Thread.sleep(seconds * 1000L);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             log.error("Sleeping interrupted for retry. Continuing...");
         }
     }

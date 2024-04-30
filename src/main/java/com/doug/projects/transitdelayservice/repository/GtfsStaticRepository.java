@@ -2,7 +2,6 @@ package com.doug.projects.transitdelayservice.repository;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.util.DynamoUtils;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
@@ -98,11 +97,15 @@ public class GtfsStaticRepository {
         }
     }
 
-    @SneakyThrows(InterruptedException.class)
     private void retryUnprocessed(List<GtfsStaticData> data, BatchWriteResult r) {
         if (r == null) {
             log.error("Timeout writing to dynamoDB. Retrying...");
-            Thread.sleep(5000);
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                log.error("Sleeping interrupted while retrying!");
+                Thread.currentThread().interrupt();
+            }
             asyncBatchWrite(data).join();
             return;
         }
