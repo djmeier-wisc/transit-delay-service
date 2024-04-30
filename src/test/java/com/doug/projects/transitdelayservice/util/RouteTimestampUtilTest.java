@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class RouteTimestampUtilTest {
 
@@ -39,6 +40,13 @@ class RouteTimestampUtilTest {
         assertEquals(10, result.getDelay().intValue());
         assertEquals("stopId", result.getClosestStopId());
         assertEquals("123", result.getTripId());
+
+        String nullString = "null#stopId#123";
+
+        BusState nullResult = BusState.fromString(nullString);
+        assertNull(nullResult.getDelay());
+        assertEquals("stopId", nullResult.getClosestStopId());
+        assertEquals("123", nullResult.getTripId());
     }
 
     @Test
