@@ -33,6 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
+import static com.doug.projects.transitdelayservice.util.TransitDateUtil.replaceGreaterThan24Hr;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
 import static java.util.stream.Collectors.groupingBy;
 
@@ -40,7 +41,7 @@ import static java.util.stream.Collectors.groupingBy;
 @RequiredArgsConstructor
 @Slf4j
 public class GtfsStaticParserService {
-    private static final DateTimeFormatter departureTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter staticScheduleTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
     private final GtfsStaticRepository gtfsStaticRepository;
     private final AgencyFeedRepository agencyFeedRepository;
 
@@ -214,24 +215,24 @@ public class GtfsStaticParserService {
             for (int i = 1; i < sameTripStops.size(); i++) {
                 GtfsStaticData sameTripStop = sameTripStops.get(i);
                 if (sameTripStop.getDepartureTime() != null) {
-                    LocalTime startTime = LocalTime.parse(sameTripStops.get(startDepartureIndex).getDepartureTime());
-                    LocalTime endTime = LocalTime.parse(sameTripStop.getDepartureTime());
+                    LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStops.get(startDepartureIndex).getDepartureTime()));
+                    LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getDepartureTime()));
                     Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
                     for (GtfsStaticData gtfsStaticData : sameTripStops.subList(startDepartureIndex + 1, i)) {
-                        gtfsStaticData.setDepartureTime(startTime.plus(difference).format(departureTimeFormatter));
+                        gtfsStaticData.setDepartureTime(startTime.plus(difference).format(staticScheduleTimeFormatter));
                         difference = difference.plus(difference);
                     }
                     startDepartureIndex = i;
                 }
                 if (sameTripStop.getArrivalTime() != null) {
                     try {
-                        LocalTime startTime = LocalTime.parse(sameTripStops.get(startArrivalIndex).getArrivalTime());
-                        LocalTime endTime = LocalTime.parse(sameTripStop.getArrivalTime());
+                        LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStops.get(startArrivalIndex).getArrivalTime()));
+                        LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getArrivalTime()));
                         Duration difference = Duration.between(startTime, endTime).dividedBy(i - startArrivalIndex);
                         List<GtfsStaticData> subList = sameTripStops.subList(startArrivalIndex + 1, i);
                         for (int j = 0; j < subList.size(); j++) {
                             GtfsStaticData gtfsStaticData = subList.get(j);
-                            gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j + 1)).format(departureTimeFormatter));
+                            gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j + 1)).format(staticScheduleTimeFormatter));
                         }
                     } catch (DateTimeParseException ignored) {
                     } finally {
@@ -280,13 +281,22 @@ public class GtfsStaticParserService {
                     attributesIterator.close();
                 }
             }
-            if (isStopTimes) {
+            if (isStopTimes && isMissingArrivalsOrDepartures(gtfsList)) {
                 interpolateDelay(gtfsList);
             }
             gtfsStaticRepository.saveAll(gtfsList);
         } catch (IOException e) {
             log.error("Failed to read file: {}", file.getName(), e);
         }
+    }
+
+    private boolean isMissingArrivalsOrDepartures(List<GtfsStaticData> gtfsList) {
+        for (GtfsStaticData gtfsStaticData : gtfsList) {
+            if (gtfsStaticData.getDepartureTime() == null || gtfsStaticData.getArrivalTime() == null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

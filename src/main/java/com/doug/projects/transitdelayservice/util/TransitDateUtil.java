@@ -1,7 +1,11 @@
 package com.doug.projects.transitdelayservice.util;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.time.*;
 import java.util.AbstractMap;
+
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 public class TransitDateUtil {
     public static long getMidnightSixDaysAgo() {
@@ -38,9 +42,22 @@ public class TransitDateUtil {
      */
     public static long calculateTimeDifferenceInSeconds(String expectedTime, long actualTimestamp, String timeZoneId) throws DateTimeException {
         ZoneId timezone = ZoneId.of(timeZoneId);
+        expectedTime = replaceGreaterThan24Hr(expectedTime);
         LocalTime time = LocalTime.parse(expectedTime);
         LocalDate date = LocalDate.ofInstant(Instant.ofEpochSecond(actualTimestamp), timezone);
         ZonedDateTime zonedDateTime = ZonedDateTime.of(date, time, timezone);
         return actualTimestamp - zonedDateTime.toEpochSecond();
+    }
+
+    public static @NotNull String replaceGreaterThan24Hr(String expectedTime) {
+        String hr = expectedTime.split(":")[0];
+        if (toInt(hr) > 23) {
+            String newHr = String.valueOf(toInt(hr) % 24);
+            if (newHr.length() == 1) {
+                newHr = "0" + newHr;
+            }
+            expectedTime = expectedTime.replace(hr, newHr);
+        }
+        return expectedTime;
     }
 }

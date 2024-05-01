@@ -297,7 +297,7 @@ public class GtfsRealtimeParserService {
         log.info("Read {} realtime feed entries from id: {}, url: {}", routeTimestampList.size(), feedId, realtimeUrl);
         fileStream.close();
         if (containsNullDelay(routeTimestampList)) {
-            log.error("Feed {} had null delay! Static data may need to be reindexed.", feedId);
+            log.error("Feed {} had null delay!.", feedId);
             return AgencyRealtimeResponse.builder()
                     .feed(feed)
                     .feedStatus(AgencyFeed.Status.OUTDATED)

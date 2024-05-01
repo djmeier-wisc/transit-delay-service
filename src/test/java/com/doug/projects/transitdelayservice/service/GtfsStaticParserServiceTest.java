@@ -87,6 +87,17 @@ class GtfsStaticParserServiceTest {
     }
 
     @Test
+    void interpolateOver24Hrs() {
+        GtfsStaticData data1 = GtfsStaticData.builder().id("").departureTime("25:00:00").build();
+        GtfsStaticData data2 = GtfsStaticData.builder().id("").build();
+        GtfsStaticData data3 = GtfsStaticData.builder().id("").departureTime("26:00:00").build();
+        GtfsStaticParserService.interpolateDelay(List.of(data1, data2, data3));
+        assertEquals("25:00:00", data1.getDepartureTime());
+        assertEquals("01:30:00", data2.getDepartureTime());
+        assertEquals("26:00:00", data3.getDepartureTime());
+    }
+
+    @Test
     void interpolateDelayEmptyList() {
         GtfsStaticParserService.interpolateDelay(emptyList());
     }
