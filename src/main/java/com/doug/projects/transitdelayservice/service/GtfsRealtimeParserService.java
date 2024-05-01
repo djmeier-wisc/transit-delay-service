@@ -298,6 +298,10 @@ public class GtfsRealtimeParserService {
         fileStream.close();
         if (containsNullDelay(routeTimestampList)) {
             log.error("Feed {} had null delay! Static data may need to be reindexed.", feedId);
+            return AgencyRealtimeResponse.builder()
+                    .feed(feed)
+                    .feedStatus(AgencyFeed.Status.OUTDATED)
+                    .build();
         }
         return AgencyRealtimeResponse.builder()
                 .feed(feed)
@@ -307,6 +311,9 @@ public class GtfsRealtimeParserService {
     }
 
     private boolean containsNullDelay(List<AgencyRouteTimestamp> routeTimestampList) {
-        return routeTimestampList.stream().flatMap(rt -> rt.getBusStatesCopyList().stream()).map(BusState::getDelay).anyMatch(Objects::isNull);
+        return routeTimestampList.stream()
+                .flatMap(rt -> rt.getBusStatesCopyList().stream())
+                .map(BusState::getDelay)
+                .anyMatch(Objects::isNull);
     }
 }

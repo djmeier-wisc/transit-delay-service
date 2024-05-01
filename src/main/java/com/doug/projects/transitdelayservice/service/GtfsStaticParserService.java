@@ -21,6 +21,9 @@ import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,11 +33,13 @@ import java.util.concurrent.TimeUnit;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
+import static java.util.stream.Collectors.groupingBy;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GtfsStaticParserService {
+    private static final DateTimeFormatter departureTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
     private final GtfsStaticRepository gtfsStaticRepository;
     private final AgencyFeedRepository agencyFeedRepository;
 
@@ -195,6 +200,43 @@ public class GtfsStaticParserService {
     }
 
     /**
+     * In some GTFS feeds, the schedule is missing departureTimes.
+     * <br /><br />
+     * For example: 5:00,null,null,5:03,null,null,5:06 would be replaced with 5:00,5:01,5:02,5:03,5:04,5:05,5:06
+     *
+     * @param gtfsList the gtfsList to be modified by this method
+     */
+    public static void interpolateDelay(List<GtfsStaticData> gtfsList) {
+        for (List<GtfsStaticData> sameTripStops : gtfsList.stream().collect(groupingBy(GtfsStaticData::getId)).values()) {
+            int startDepartureIndex = 0;
+            int startArrivalIndex = 0;
+            for (int i = 1; i < sameTripStops.size(); i++) {
+                GtfsStaticData sameTripStop = sameTripStops.get(i);
+                if (sameTripStop.getDepartureTime() != null) {
+                    LocalTime startTime = LocalTime.parse(sameTripStops.get(startDepartureIndex).getDepartureTime());
+                    LocalTime endTime = LocalTime.parse(sameTripStop.getDepartureTime());
+                    Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
+                    for (GtfsStaticData gtfsStaticData : sameTripStops.subList(startDepartureIndex + 1, i)) {
+                        gtfsStaticData.setDepartureTime(startTime.plus(difference).toString());
+                        difference = difference.plus(difference);
+                    }
+                    startDepartureIndex = i;
+                }
+                if (sameTripStop.getArrivalTime() != null) {
+                    LocalTime startTime = LocalTime.parse(sameTripStops.get(startArrivalIndex).getArrivalTime());
+                    LocalTime endTime = LocalTime.parse(sameTripStop.getArrivalTime());
+                    Duration difference = Duration.between(startTime, endTime).dividedBy(i - startArrivalIndex);
+                    for (GtfsStaticData gtfsStaticData : sameTripStops.subList(startArrivalIndex + 1, i)) {
+                        gtfsStaticData.setArrivalTime(startTime.plus(difference).format(departureTimeFormatter));
+                        difference = difference.plus(difference);
+                    }
+                    startArrivalIndex = i;
+                }
+            }
+        }
+    }
+
+    /**
      * Generic converter to read data from a single file (routes.txt, trips.txt, etc.) from file and write to dynamo.
      *
      * @param <T>      an Attributes class used to map against .csv file passed in. Should be
@@ -214,6 +256,7 @@ public class GtfsStaticParserService {
                 .with(CsvParser.Feature.TRIM_SPACES)
                 .readValues(file)) {
             List<GtfsStaticData> gtfsList = new ArrayList<>(100);
+            boolean isStopTimes = false;
             while (attributesIterator.hasNext()) {
                 T attributes = attributesIterator.next();
                 if (attributes instanceof RoutesAttributes)
@@ -222,13 +265,18 @@ public class GtfsStaticParserService {
                     gtfsList.add(convert((StopAttributes) attributes, agencyId, stopIdToNameMap));
                 else if (attributes instanceof TripAttributes)
                     gtfsList.add(convert((TripAttributes) attributes, agencyId, routeIdToNameMap, tripIdToNameMap));
-                else if (attributes instanceof StopTimeAttributes)
+                else if (attributes instanceof StopTimeAttributes) {
                     gtfsList.add(convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap));
+                    isStopTimes = true;
+                }
                 else {
                     //this shouldn't be possible if you code it right... famous last words
                     log.error("UNRECOGNIZED TYPE OF ATTRIBUTE, FAST FAIL.");
                     attributesIterator.close();
                 }
+            }
+            if (isStopTimes) {
+                interpolateDelay(gtfsList);
             }
             gtfsStaticRepository.saveAll(gtfsList);
         } catch (IOException e) {

@@ -19,7 +19,6 @@ import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
@@ -67,27 +66,31 @@ public class GtfsStaticRepository {
      * @param data the data to save
      */
     private void parallelSaveAll(List<GtfsStaticData> data) {
-        CompletableFuture<?>[] result = DynamoUtils.chunkList(data, 25)
-                .stream()
-                .map(this::asyncBatchWrite)
-                .toArray(CompletableFuture[]::new);
-        CompletableFuture.allOf(result)
-                .join();
+        List<GtfsStaticData> unfinishedWrites = new ArrayList<>();
+        int numRetries = 0;
+        do {
+            CompletableFuture<List<GtfsStaticData>>[] result = DynamoUtils.chunkList(data, 25)
+                    .stream()
+                    .map(this::asyncBatchWrite)
+                    .toArray(CompletableFuture[]::new);
+            CompletableFuture.allOf(result)
+                    .join();
+            unfinishedWrites.addAll(Arrays.stream(result)
+                    .map(CompletableFuture::join)
+                    .flatMap(Collection::stream)
+                    .toList());
+        } while (!unfinishedWrites.isEmpty() && ++numRetries < 3);
     }
 
     /**
      * Writes all items in list to DynamoDb asynchronously.
      *
      * @param chunkedList a list of size 25 or lower
-     * @return a completableFuture which writes this data
+     * @return a completableFuture which writes this data, containing any erronious
      */
-    private CompletableFuture<Void> asyncBatchWrite(List<GtfsStaticData> chunkedList) {
+    private CompletableFuture<List<GtfsStaticData>> asyncBatchWrite(List<GtfsStaticData> chunkedList) {
         return enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
-                //if the write takes longer than 10 seconds, we get an exception that kills the whole process
-                //we add a cutoff here that tries to prevent that exception.
-                //if writing just 25 items takes over 10 seconds, the partition might be overloaded
-                .completeOnTimeout(null, 9500, TimeUnit.MILLISECONDS)
-                .thenAccept(r -> retryUnprocessed(chunkedList, r));
+                .thenApply(res -> res.unprocessedPutItemsForTable(table));
     }
 
     private void addBatchWrites(List<GtfsStaticData> chunkedList, BatchWriteItemEnhancedRequest.Builder b) {
