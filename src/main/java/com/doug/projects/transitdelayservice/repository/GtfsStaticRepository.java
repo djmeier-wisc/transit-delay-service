@@ -66,15 +66,16 @@ public class GtfsStaticRepository {
      * @param data the data to save
      */
     private void parallelSaveAll(List<GtfsStaticData> data) {
-        List<GtfsStaticData> unfinishedWrites = new ArrayList<>();
+        List<GtfsStaticData> unfinishedWrites = new ArrayList<>(data);
         int numRetries = 0;
         do {
-            CompletableFuture<List<GtfsStaticData>>[] result = DynamoUtils.chunkList(data, 25)
+            CompletableFuture<List<GtfsStaticData>>[] result = DynamoUtils.chunkList(unfinishedWrites, 25)
                     .stream()
                     .map(this::asyncBatchWrite)
                     .toArray(CompletableFuture[]::new);
             CompletableFuture.allOf(result)
                     .join();
+            unfinishedWrites.clear();
             unfinishedWrites.addAll(Arrays.stream(result)
                     .map(CompletableFuture::join)
                     .flatMap(Collection::stream)

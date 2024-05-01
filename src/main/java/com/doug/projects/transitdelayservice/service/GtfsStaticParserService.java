@@ -24,6 +24,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -217,20 +218,25 @@ public class GtfsStaticParserService {
                     LocalTime endTime = LocalTime.parse(sameTripStop.getDepartureTime());
                     Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
                     for (GtfsStaticData gtfsStaticData : sameTripStops.subList(startDepartureIndex + 1, i)) {
-                        gtfsStaticData.setDepartureTime(startTime.plus(difference).toString());
+                        gtfsStaticData.setDepartureTime(startTime.plus(difference).format(departureTimeFormatter));
                         difference = difference.plus(difference);
                     }
                     startDepartureIndex = i;
                 }
                 if (sameTripStop.getArrivalTime() != null) {
-                    LocalTime startTime = LocalTime.parse(sameTripStops.get(startArrivalIndex).getArrivalTime());
-                    LocalTime endTime = LocalTime.parse(sameTripStop.getArrivalTime());
-                    Duration difference = Duration.between(startTime, endTime).dividedBy(i - startArrivalIndex);
-                    for (GtfsStaticData gtfsStaticData : sameTripStops.subList(startArrivalIndex + 1, i)) {
-                        gtfsStaticData.setArrivalTime(startTime.plus(difference).format(departureTimeFormatter));
-                        difference = difference.plus(difference);
+                    try {
+                        LocalTime startTime = LocalTime.parse(sameTripStops.get(startArrivalIndex).getArrivalTime());
+                        LocalTime endTime = LocalTime.parse(sameTripStop.getArrivalTime());
+                        Duration difference = Duration.between(startTime, endTime).dividedBy(i - startArrivalIndex);
+                        List<GtfsStaticData> subList = sameTripStops.subList(startArrivalIndex + 1, i);
+                        for (int j = 0; j < subList.size(); j++) {
+                            GtfsStaticData gtfsStaticData = subList.get(j);
+                            gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j + 1)).format(departureTimeFormatter));
+                        }
+                    } catch (DateTimeParseException ignored) {
+                    } finally {
+                        startArrivalIndex = i;
                     }
-                    startArrivalIndex = i;
                 }
             }
         }
@@ -268,8 +274,7 @@ public class GtfsStaticParserService {
                 else if (attributes instanceof StopTimeAttributes) {
                     gtfsList.add(convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap));
                     isStopTimes = true;
-                }
-                else {
+                } else {
                     //this shouldn't be possible if you code it right... famous last words
                     log.error("UNRECOGNIZED TYPE OF ATTRIBUTE, FAST FAIL.");
                     attributesIterator.close();
