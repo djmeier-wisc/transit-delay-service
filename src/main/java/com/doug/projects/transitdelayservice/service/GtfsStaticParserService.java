@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.replaceGreaterThan24Hr;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
+import static io.micrometer.common.util.StringUtils.isNotEmpty;
 import static java.util.stream.Collectors.groupingBy;
 
 @Service
@@ -214,7 +215,7 @@ public class GtfsStaticParserService {
             int startArrivalIndex = 0;
             for (int i = 1; i < sameTripStops.size(); i++) {
                 GtfsStaticData sameTripStop = sameTripStops.get(i);
-                if (sameTripStop.getDepartureTime() != null) {
+                if (isNotEmpty(sameTripStop.getDepartureTime())) {
                     LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStops.get(startDepartureIndex).getDepartureTime()));
                     LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getDepartureTime()));
                     Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
@@ -224,7 +225,7 @@ public class GtfsStaticParserService {
                     }
                     startDepartureIndex = i;
                 }
-                if (sameTripStop.getArrivalTime() != null) {
+                if (isNotEmpty(sameTripStop.getArrivalTime())) {
                     try {
                         LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStops.get(startArrivalIndex).getArrivalTime()));
                         LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getArrivalTime()));
@@ -285,7 +286,7 @@ public class GtfsStaticParserService {
                 interpolateDelay(gtfsList);
             }
             gtfsStaticRepository.saveAll(gtfsList);
-        } catch (IOException e) {
+        } catch (IOException | DateTimeParseException e) {
             log.error("Failed to read file: {}", file.getName(), e);
         }
     }
