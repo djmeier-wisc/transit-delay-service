@@ -5,7 +5,6 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.transit.ExpectedBusTimes;
-import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
 import com.google.transit.realtime.GtfsRealtime;
@@ -31,6 +30,7 @@ import java.util.stream.Collectors;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.isRedirect;
 import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.CANCELED;
+import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED;
 import static org.apache.commons.lang3.ObjectUtils.isEmpty;
 
 @Service
@@ -41,7 +41,6 @@ public class GtfsRealtimeParserService {
     public static final List<GtfsRealtime.TripDescriptor.ScheduleRelationship> ignorableScheduleRelationshipEnums =
             List.of(CANCELED);
     private final GtfsStaticRepository staticRepository;
-    private final AgencyFeedRepository feedRepository;
     @Qualifier("realtime")
     private final Executor realtimeExecutor;
     private final ExpectedBusTimesService expectedBusTimesService;
@@ -53,7 +52,7 @@ public class GtfsRealtimeParserService {
      * @return true if all required fields are not null
      */
     private static boolean validateRequiredFields(GtfsRealtime.TripUpdate entity) {
-        return !ignorableScheduleRelationshipEnums.contains(entity.getTrip().getScheduleRelationship());
+        return entity.getTrip().getScheduleRelationship().equals(SCHEDULED);
     }
 
     @NotNull

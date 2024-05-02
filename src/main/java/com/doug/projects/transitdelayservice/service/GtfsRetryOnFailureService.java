@@ -54,7 +54,7 @@ public class GtfsRetryOnFailureService {
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
         switch (feedStatus) {
             case ACTIVE -> {
-                //do nothing
+                //re-activate deactivated feeds on success
             }
             case UNAUTHORIZED, DELETED -> {
                 updateFeedToStatus(feed, feedStatus);
@@ -84,10 +84,10 @@ public class GtfsRetryOnFailureService {
         }
     }
 
-    private void updateFeedToStatus(AgencyFeed feed, AgencyFeed.Status status) {
-        log.error("Updating feed {} to {}", feed.getId(), status);
-        feedRepository.removeAgencyFeed(feed);
-        feed.setStatus(String.valueOf(status));
-        feedRepository.writeAgencyFeed(feed);
+    private void updateFeedToStatus(AgencyFeed newFeed, AgencyFeed.Status newStatus) {
+        log.error("Updating feed {} to {}", newFeed.getId(), newStatus);
+        feedRepository.removeAgencyFeed(newFeed);
+        newFeed.setStatus(String.valueOf(newStatus));
+        feedRepository.writeAgencyFeed(newFeed);
     }
 }
