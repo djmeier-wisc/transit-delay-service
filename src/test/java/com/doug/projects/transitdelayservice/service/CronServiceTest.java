@@ -34,7 +34,7 @@ class CronServiceTest {
     private AgencyRouteTimestampRepository routeTimestampRepository;
     @Mock
     private GtfsRetryOnFailureService retryOnFailureService;
-    private final Executor rtExec = Executors.newSingleThreadExecutor();
+    private final Executor executor = Executors.newSingleThreadExecutor();
 
     private static List<AgencyFeed> getAgencyFeedList() {
         return List.of(getAgencyFeedActive());
@@ -73,7 +73,8 @@ class CronServiceTest {
                 .thenReturn(getAgencyFeedList());
         when(rtResponseService.convertFromAsync(eq(getAgencyFeedActive()), anyInt()))
                 .thenReturn(CompletableFuture.completedFuture(getResponse()));
-        ReflectionTestUtils.setField(cronService, "realtimeExecutor", rtExec);
+        ReflectionTestUtils.setField(cronService, "retryExecutor", executor);
+        ReflectionTestUtils.setField(cronService, "dynamoExecutor", executor);
         cronService.writeGtfsRealtimeData();
         verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatus(eq(ACTIVE));
         verify(rtResponseService, times(1)).convertFromAsync(eq(getAgencyFeedActive()), anyInt());

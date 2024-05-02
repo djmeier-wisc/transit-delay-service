@@ -12,7 +12,8 @@ import org.springframework.util.CollectionUtils;
 import java.util.Collections;
 import java.util.List;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.TIMEOUT;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.UNAVAILABLE;
 
 /**
  * Used in the event of a failure when reading static data or realtime data.
@@ -54,7 +55,7 @@ public class GtfsRetryOnFailureService {
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
         switch (feedStatus) {
             case ACTIVE -> {
-                //do nothing
+                //re-activate deactivated feeds on success
             }
             case UNAUTHORIZED, DELETED -> {
                 updateFeedToStatus(feed, feedStatus);
@@ -70,7 +71,7 @@ public class GtfsRetryOnFailureService {
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
                 if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
                     log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
-                    updateFeedToStatus(feed, OUTDATED);
+                    updateFeedToStatus(feed, realtimeResult.getFeedStatus());
                 }
             }
             case TIMEOUT, UNAVAILABLE -> {
@@ -84,10 +85,10 @@ public class GtfsRetryOnFailureService {
         }
     }
 
-    private void updateFeedToStatus(AgencyFeed feed, AgencyFeed.Status status) {
-        log.error("Updating feed {} to {}", feed.getId(), status);
-        feedRepository.removeAgencyFeed(feed);
-        feed.setStatus(String.valueOf(status));
-        feedRepository.writeAgencyFeed(feed);
+    private void updateFeedToStatus(AgencyFeed newFeed, AgencyFeed.Status newStatus) {
+        log.error("Updating feed {} to {}", newFeed.getId(), newStatus);
+        feedRepository.removeAgencyFeed(newFeed);
+        newFeed.setStatus(String.valueOf(newStatus));
+        feedRepository.writeAgencyFeed(newFeed);
     }
 }

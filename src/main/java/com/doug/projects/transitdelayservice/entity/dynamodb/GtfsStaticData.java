@@ -1,13 +1,15 @@
 package com.doug.projects.transitdelayservice.entity.dynamodb;
 
-import lombok.Data;
-import lombok.Getter;
+import lombok.*;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.*;
 
 @Data
 @DynamoDbBean
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class GtfsStaticData {
     public static final String AGENCY_TYPE_INDEX = "agencyType-index";
     public static final String AGENCY_TYPE_ID_INDEX = "agencyType-id-index";
