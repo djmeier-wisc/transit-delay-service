@@ -24,8 +24,10 @@ public class CronService {
     private final GtfsRealtimeParserService rtResponseService;
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsRetryOnFailureService retryOnFailureService;
-    @Qualifier("realtime")
-    private final Executor realtimeExecutor;
+    @Qualifier("retry")
+    private final Executor retryExecutor;
+    @Qualifier("dynamoWriting")
+    private final Executor dynamoExecutor;
     @Value("${doesAgencyCronRun}")
     private Boolean doesAgencyCronRun;
     @Value("${doesRealtimeCronRun}")
@@ -61,8 +63,8 @@ public class CronService {
                         .stream()
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
-                                        .thenApplyAsync(retryOnFailureService::reCheckFailures, realtimeExecutor)
-                                        .thenAcceptAsync(routeTimestampRepository::saveAll, realtimeExecutor))
+                                        .thenApplyAsync(retryOnFailureService::reCheckFailures, retryExecutor)
+                                        .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
                         .toArray(CompletableFuture[]::new);
 
         CompletableFuture.allOf(allFutures).join();

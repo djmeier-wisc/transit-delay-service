@@ -56,4 +56,14 @@ public class TransitDelayServiceApplication {
     public Executor realtimeExecutor() {
         return Executors.newFixedThreadPool(10);
     }
+
+    @Bean("retry")
+    public Executor retryExecutor() {
+        return Executors.newFixedThreadPool(10);
+    }
+
+    @Bean("dynamoWriting")
+    public Executor dynamoExecutor() {
+        return Executors.newFixedThreadPool(5);
+    }
 }

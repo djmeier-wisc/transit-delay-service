@@ -58,5 +58,9 @@ class TransitDateUtilTest {
         assertEquals(-60, timeBefore);
         long newTZ = calculateTimeDifferenceInSeconds("15:09:26", 1714342166, "America/Los_Angeles");
         assertEquals(0, newTZ);
+        long over24Hrs = calculateTimeDifferenceInSeconds("29:26:19", 1714559179, "America/Chicago");
+        assertEquals(0, over24Hrs);
+        long over24HrsFormatted = calculateTimeDifferenceInSeconds("05:26:19", 1714559179, "America/Chicago");
+        assertEquals(0, over24HrsFormatted);
     }
 }

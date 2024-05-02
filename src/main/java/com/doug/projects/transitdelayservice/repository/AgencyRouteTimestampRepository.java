@@ -5,7 +5,6 @@ import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
-import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.core.async.SdkPublisher;
@@ -15,15 +14,13 @@ import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.*;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp.createKey;
+import static java.util.Collections.emptyList;
 
 @Repository
 @Slf4j
@@ -46,30 +43,32 @@ public class AgencyRouteTimestampRepository {
      * @param data the data to save
      */
     public void saveAll(List<AgencyRouteTimestamp> data) {
-        var result = DynamoUtils.chunkList(data, 25)
-                .stream()
-                .map(this::asyncBatchWrite)
-                .toArray(CompletableFuture[]::new);
-        CompletableFuture.allOf(result)
-                .join();
+        List<AgencyRouteTimestamp> unfinishedWrites = new ArrayList<>(data);
+        int numRetries = 0;
+        do {
+            CompletableFuture<List<AgencyRouteTimestamp>>[] result = DynamoUtils.chunkList(unfinishedWrites, 25)
+                    .stream()
+                    .map(this::asyncBatchWrite)
+                    .toArray(CompletableFuture[]::new);
+            CompletableFuture.allOf(result)
+                    .join();
+            unfinishedWrites.clear();
+            unfinishedWrites.addAll(Arrays.stream(result)
+                    .map(CompletableFuture::join)
+                    .flatMap(Collection::stream)
+                    .toList());
+        } while (!unfinishedWrites.isEmpty() && ++numRetries < 3);
     }
 
     /**
-     * Writes all items in list to DynamoDb asynchronously.
+     * Writes all items in list to DynamoDb asynchronously. Returns any failures
      *
      * @param chunkedList
      * @return
      */
-    private CompletableFuture<Void> asyncBatchWrite(List<AgencyRouteTimestamp> chunkedList) {
-        if (CollectionUtils.isEmpty(chunkedList)) {
-            return CompletableFuture.completedFuture(null);
-        }
-        return asyncEnhancedClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
-                //if the write takes longer than 10 seconds, we get an exception that kills the whole process
-                //we add a cutoff here that tries to prevent that exception.
-                //if writing just 25 items takes over 10 seconds, the partition might be overloaded
-                .completeOnTimeout(null, 9500, TimeUnit.MILLISECONDS)
-                .thenAcceptAsync(r -> retryUnprocessed(chunkedList, r));
+    private CompletableFuture<List<AgencyRouteTimestamp>> asyncBatchWrite(List<AgencyRouteTimestamp> chunkedList) {
+        if (chunkedList.isEmpty()) return CompletableFuture.completedFuture(emptyList());
+        return asyncEnhancedClient.batchWriteItem(b -> addBatchWrites(chunkedList, b)).thenApply(b -> b.unprocessedPutItemsForTable(table));
     }
 
     private void addBatchWrites(List<AgencyRouteTimestamp> chunkedList, BatchWriteItemEnhancedRequest.Builder b) {
