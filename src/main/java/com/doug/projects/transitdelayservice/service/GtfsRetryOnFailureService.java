@@ -12,7 +12,8 @@ import org.springframework.util.CollectionUtils;
 import java.util.Collections;
 import java.util.List;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.TIMEOUT;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.UNAVAILABLE;
 
 /**
  * Used in the event of a failure when reading static data or realtime data.
@@ -70,7 +71,7 @@ public class GtfsRetryOnFailureService {
                 var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).join();
                 if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
                     log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
-                    updateFeedToStatus(feed, OUTDATED);
+                    updateFeedToStatus(feed, realtimeResult.getFeedStatus());
                 }
             }
             case TIMEOUT, UNAVAILABLE -> {

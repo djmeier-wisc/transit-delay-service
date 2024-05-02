@@ -52,7 +52,7 @@ public class GtfsRealtimeParserService {
      * @return true if all required fields are not null
      */
     private static boolean validateRequiredFields(GtfsRealtime.TripUpdate entity) {
-        return entity.getTrip().getScheduleRelationship().equals(SCHEDULED);
+        return entity.getTrip().getScheduleRelationship().equals(SCHEDULED) && getFirstScheduled(entity).isPresent();
     }
 
     @NotNull
@@ -74,8 +74,8 @@ public class GtfsRealtimeParserService {
      * Will return null in the case of not finding anything in the schedule, or if no details are passed.
      *
      * @param tu the tripUpdate
-     * @param tripMap
-     * @return
+     * @param tripMap the tripIds and their associated arrival/departure times
+     * @return the delay of the trip, or null if the trip data was not found in tripMap / the feed was invalid
      */
     private static Integer getDelay(GtfsRealtime.TripUpdate tu, ExpectedBusTimes tripMap) {
         if (tu.hasDelay()) {
@@ -115,7 +115,11 @@ public class GtfsRealtimeParserService {
     }
 
     private static Integer extractDifferenceFromActualAndExpectedTime(GtfsRealtime.TripUpdate tu, ExpectedBusTimes tripMap) {
-        var currStopTimeUpdate = tu.getStopTimeUpdate(0);
+        var optionalStopTimeUpdate = getFirstScheduled(tu);
+        if (optionalStopTimeUpdate.isEmpty()) {
+            return null;
+        }
+        var currStopTimeUpdate = optionalStopTimeUpdate.get();
         var arrival = currStopTimeUpdate.getArrival();
         var departure = currStopTimeUpdate.getDeparture();
         var timezone = tripMap.getTimezone();
@@ -138,11 +142,26 @@ public class GtfsRealtimeParserService {
         }
     }
 
+    private static Optional<GtfsRealtime.TripUpdate.StopTimeUpdate> getFirstScheduled(GtfsRealtime.TripUpdate tripUpdate) {
+        return tripUpdate.getStopTimeUpdateList()
+                .stream()
+                .filter(tu ->
+                        tu.getScheduleRelationship()
+                                .equals(GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SCHEDULED))
+                .findFirst();
+    }
+
     private static Map<String, Integer> getTripsWithoutDelayAttribute(List<GtfsRealtime.TripUpdate> tripUpdates) {
         return tripUpdates.stream()
                 .filter(GtfsRealtimeParserService::doesTripNotHaveDelayAttribute)
                 .filter(GtfsRealtimeParserService::hasTripIdAndStopSequence)
-                .collect(Collectors.toMap(GtfsRealtimeParserService::getTripId, GtfsRealtimeParserService::getStopSequence, (a, b) -> a));
+                .filter(tu -> getFirstScheduled(tu).isPresent())
+                .collect(Collectors.toMap(
+                        GtfsRealtimeParserService::getTripId,
+                        tu -> getFirstScheduled(tu)
+                                .map(GtfsRealtime.TripUpdate.StopTimeUpdate::getStopSequence)
+                                .orElse(0),
+                        (a, b) -> a));
     }
 
     private static boolean hasTripIdAndStopSequence(GtfsRealtime.TripUpdate tripUpdate) {
@@ -239,10 +258,6 @@ public class GtfsRealtimeParserService {
 
     private static String getTripId(GtfsRealtime.TripUpdate tripUpdate) {
         return tripUpdate.getTrip().getTripId();
-    }
-
-    private static int getStopSequence(GtfsRealtime.TripUpdate tripUpdate) {
-        return tripUpdate.getStopTimeUpdate(0).getStopSequence();
     }
 
     @NotNull
