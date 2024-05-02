@@ -100,24 +100,6 @@ public class GtfsStaticRepository {
         }
     }
 
-    private void retryUnprocessed(List<GtfsStaticData> data, BatchWriteResult r) {
-        if (r == null) {
-            log.error("Timeout writing to dynamoDB. Retrying...");
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                log.error("Sleeping interrupted while retrying!");
-                Thread.currentThread().interrupt();
-            }
-            asyncBatchWrite(data).join();
-            return;
-        }
-        if (!r.unprocessedPutItemsForTable(table).isEmpty()) {
-            log.error("Unprocessed items: {}", r.unprocessedPutItemsForTable(table));
-            asyncBatchWrite(r.unprocessedPutItemsForTable(table)).join();
-        }
-    }
-
     public Mono<List<GtfsStaticData>> findAllRoutes(String agencyId) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
                 k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
