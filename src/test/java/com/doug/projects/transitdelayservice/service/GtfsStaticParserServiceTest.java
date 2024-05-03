@@ -29,25 +29,34 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateDelayOneStop() {
-        GtfsStaticData data1 = GtfsStaticData.builder().id("").departureTime("05:00:00").build();
-        GtfsStaticParserService.interpolateDelay(List.of(data1));
+        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
+        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        gtfsList.add(data1);
+        GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("05:00:00", data1.getDepartureTime());
     }
     @Test
     void interpolateDelayTwoStops() {
-        GtfsStaticData data1 = GtfsStaticData.builder().id("").departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().id("").departureTime("05:01:00").build();
-        GtfsStaticParserService.interpolateDelay(List.of(data1, data2));
+        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
+        GtfsStaticData data2 = GtfsStaticData.builder().departureTime("05:01:00").build();
+        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        gtfsList.add(data1);
+        gtfsList.add(data2);
+        GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("05:00:00", data1.getDepartureTime());
         assertEquals("05:01:00", data2.getDepartureTime());
     }
 
     @Test
     void interpolateDelayOneNullStop() {
-        GtfsStaticData data1 = GtfsStaticData.builder().id("").departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().id("").build();
-        GtfsStaticData data3 = GtfsStaticData.builder().id("").departureTime("05:02:00").build();
-        GtfsStaticParserService.interpolateDelay(List.of(data1, data2, data3));
+        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
+        GtfsStaticData data2 = GtfsStaticData.builder().build();
+        GtfsStaticData data3 = GtfsStaticData.builder().departureTime("05:02:00").build();
+        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        gtfsList.add(data1);
+        gtfsList.add(data2);
+        gtfsList.add(data3);
+        GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("05:00:00", data1.getDepartureTime());
         assertEquals("05:01:00", data2.getDepartureTime());
         assertEquals("05:02:00", data3.getDepartureTime());
@@ -55,11 +64,16 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateDelayTwoBlanks() {
-        GtfsStaticData data1 = GtfsStaticData.builder().id("").departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().id("").build();
-        GtfsStaticData data3 = GtfsStaticData.builder().id("").build();
-        GtfsStaticData data4 = GtfsStaticData.builder().id("").departureTime("05:01:30").build();
-        GtfsStaticParserService.interpolateDelay(List.of(data1, data2, data3, data4));
+        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
+        GtfsStaticData data2 = GtfsStaticData.builder().build();
+        GtfsStaticData data3 = GtfsStaticData.builder().build();
+        GtfsStaticData data4 = GtfsStaticData.builder().departureTime("05:01:30").build();
+        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        gtfsList.add(data1);
+        gtfsList.add(data2);
+        gtfsList.add(data3);
+        gtfsList.add(data4);
+        GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("05:00:00", data1.getDepartureTime());
         assertEquals("05:00:30", data2.getDepartureTime());
         assertEquals("05:01:00", data3.getDepartureTime());
@@ -68,12 +82,18 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateDelayNullStartOrEnd() {
-        GtfsStaticData data1 = GtfsStaticData.builder().id("").arrivalTime("06:00:00").departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().id("").build();
-        GtfsStaticData data3 = GtfsStaticData.builder().id("").departureTime("05:01:00").build();
-        GtfsStaticData data4 = GtfsStaticData.builder().id("").build();
-        GtfsStaticData data5 = GtfsStaticData.builder().id("").arrivalTime("06:02:00").departureTime("05:02:00").build();
-        GtfsStaticParserService.interpolateDelay(List.of(data1, data2, data3, data4, data5));
+        GtfsStaticData data1 = GtfsStaticData.builder().arrivalTime("06:00:00").departureTime("05:00:00").build();
+        GtfsStaticData data2 = GtfsStaticData.builder().build();
+        GtfsStaticData data3 = GtfsStaticData.builder().departureTime("05:01:00").build();
+        GtfsStaticData data4 = GtfsStaticData.builder().build();
+        GtfsStaticData data5 = GtfsStaticData.builder().arrivalTime("06:02:00").departureTime("05:02:00").build();
+        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        gtfsList.add(data1);
+        gtfsList.add(data2);
+        gtfsList.add(data3);
+        gtfsList.add(data4);
+        gtfsList.add(data5);
+        GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("05:00:00", data1.getDepartureTime());
         assertEquals("05:00:30", data2.getDepartureTime());
         assertEquals("05:01:00", data3.getDepartureTime());
@@ -88,10 +108,14 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateOver24Hrs() {
-        GtfsStaticData data1 = GtfsStaticData.builder().id("").departureTime("25:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().id("").build();
-        GtfsStaticData data3 = GtfsStaticData.builder().id("").departureTime("26:00:00").build();
-        GtfsStaticParserService.interpolateDelay(List.of(data1, data2, data3));
+        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("25:00:00").build();
+        GtfsStaticData data2 = GtfsStaticData.builder().build();
+        GtfsStaticData data3 = GtfsStaticData.builder().departureTime("26:00:00").build();
+        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        gtfsList.add(data1);
+        gtfsList.add(data2);
+        gtfsList.add(data3);
+        GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("25:00:00", data1.getDepartureTime());
         assertEquals("01:30:00", data2.getDepartureTime());
         assertEquals("26:00:00", data3.getDepartureTime());

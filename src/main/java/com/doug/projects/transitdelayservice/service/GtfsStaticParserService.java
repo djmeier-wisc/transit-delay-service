@@ -207,7 +207,7 @@ public class GtfsStaticParserService {
      */
     public static void interpolateDelay(List<GtfsStaticData> gtfsList) {
         gtfsList.sort(Comparator.comparing(GtfsStaticData::getId, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(GtfsStaticData::getStopSequence));
+                .thenComparing(GtfsStaticData::getStopSequence, Comparator.nullsLast(Comparator.naturalOrder())));
         int startDepartureIndex = 0;
         int startArrivalIndex = 0;
         for (int i = 1; i < gtfsList.size(); i++) {
@@ -220,12 +220,12 @@ public class GtfsStaticParserService {
                     Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
                     for (int j = startDepartureIndex + 1; j < i; j++) {
                         GtfsStaticData gtfsStaticData = gtfsList.get(j);
-                        gtfsStaticData.setDepartureTime(startTime.plus(difference.multipliedBy(j + 1))
+                        gtfsStaticData.setDepartureTime(startTime.plus(difference.multipliedBy(j - startDepartureIndex))
                                 .format(staticScheduleTimeFormatter));
                     }
                 } catch (DateTimeParseException ignored) {
                 } finally {
-                    startArrivalIndex = i;
+                    startDepartureIndex = i;
                 }
             }
             if (isNotEmpty(sameTripStop.getArrivalTime())) {
@@ -237,7 +237,7 @@ public class GtfsStaticParserService {
                             .dividedBy(i - startArrivalIndex);
                     for (int j = startArrivalIndex + 1; j < i; j++) {
                         GtfsStaticData gtfsStaticData = gtfsList.get(j);
-                        gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j + 1))
+                        gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j - startArrivalIndex))
                                 .format(staticScheduleTimeFormatter));
                     }
                 } catch (DateTimeParseException ignored) {
