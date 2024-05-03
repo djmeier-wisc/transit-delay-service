@@ -12,8 +12,7 @@ import org.springframework.util.CollectionUtils;
 import java.util.Collections;
 import java.util.List;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.TIMEOUT;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.UNAVAILABLE;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
 
 /**
  * Used in the event of a failure when reading static data or realtime data.
@@ -55,7 +54,10 @@ public class GtfsRetryOnFailureService {
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
         switch (feedStatus) {
             case ACTIVE -> {
-                //re-activate deactivated feeds on success
+                if (!feed.getStatus()
+                        .equals(ACTIVE)) {
+                    updateFeedToStatus(feed, ACTIVE);
+                }
             }
             case UNAUTHORIZED, DELETED -> {
                 updateFeedToStatus(feed, feedStatus);

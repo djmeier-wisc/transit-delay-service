@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -39,13 +41,25 @@ public class CronService {
             return;
         try {
             log.info("Gathering Feeds...");
-            var feeds = gtfsFeedAggregator.gatherRTFeeds();
+            var newFeeds = gtfsFeedAggregator.gatherRTFeeds();
             log.info("Gathered Feeds. Writing feeds to table...");
+            populateTimezoneFromOldFeeds(newFeeds);
             agencyFeedRepository.removeAllAgencyFeeds();
-            agencyFeedRepository.writeAgencyFeeds(feeds);
+            agencyFeedRepository.writeAgencyFeeds(newFeeds);
             log.info("Wrote feeds successfully.");
         } catch (Exception e) {
             log.error("Failed to write gtfs static data", e);
+        }
+    }
+
+    private void populateTimezoneFromOldFeeds(List<AgencyFeed> newFeeds) {
+        for (AgencyFeed oldFeed : agencyFeedRepository.getAllAgencyFeeds()) {
+            for (AgencyFeed newFeed : newFeeds) {
+                if (newFeed.getId()
+                        .equals(oldFeed.getId())) {
+                    newFeed.setTimezone(oldFeed.getTimezone());
+                }
+            }
         }
     }
 

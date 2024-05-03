@@ -11,13 +11,17 @@ public class TransitDateUtil {
     public static long getMidnightSixDaysAgo() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
-        return LocalDateTime.of(ldt.minusDays(6).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+        return LocalDateTime.of(ldt.minusDays(6)
+                        .toLocalDate(), midnight)
+                .toEpochSecond(ZoneOffset.of("-5"));
     }
 
     public static long getMidnightTonight() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
-        return LocalDateTime.of(ldt.plusDays(1).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+        return LocalDateTime.of(ldt.plusDays(1)
+                        .toLocalDate(), midnight)
+                .toEpochSecond(ZoneOffset.of("-5"));
     }
 
     public static AbstractMap.SimpleEntry<Long, Long>[] getStartAndEndTimesList(long startTime, long endTime,
@@ -32,8 +36,8 @@ public class TransitDateUtil {
     }
 
     /**
-     * Performs actualTime - expectedTime.
-     * For example, if actualTime is 12:32 and expectedTime is 12:25, this would return 7 (mins) * 60 (seconds in min)
+     * Performs actualTime - expectedTime. For example, if actualTime is 12:32 and expectedTime is 12:25, this would
+     * return 7 (mins) * 60 (seconds in min)
      *
      * @param expectedTime    The expected arrival/departure of a bus, in format H:mm:ss
      * @param actualTimestamp The actual arrival/departure time of a bus, in epoch seconds
@@ -43,10 +47,19 @@ public class TransitDateUtil {
     public static long calculateTimeDifferenceInSeconds(String expectedTime, long actualTimestamp, String timeZoneId) throws DateTimeException {
         ZoneId timezone = ZoneId.of(timeZoneId);
         expectedTime = replaceGreaterThan24Hr(expectedTime);
+        expectedTime = addLeadingZero(expectedTime);
         LocalTime time = LocalTime.parse(expectedTime);
         LocalDate date = LocalDate.ofInstant(Instant.ofEpochSecond(actualTimestamp), timezone);
         ZonedDateTime zonedDateTime = ZonedDateTime.of(date, time, timezone);
         return actualTimestamp - zonedDateTime.toEpochSecond();
+    }
+
+    private static String addLeadingZero(String expectedTime) {
+        String[] split = expectedTime.split(":");
+        if (split.length != 0 && split[0].length() < 2) {
+            return '0' + expectedTime;
+        }
+        return expectedTime;
     }
 
     public static @NotNull String replaceGreaterThan24Hr(String expectedTime) {
