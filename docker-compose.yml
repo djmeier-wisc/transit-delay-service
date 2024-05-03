@@ -51,4 +51,4 @@ services:
     networks:
       credentials_network:
         ipv4_address: "169.254.170.3"
-    mem_limit: 512mb
+    mem_limit: 2056mb

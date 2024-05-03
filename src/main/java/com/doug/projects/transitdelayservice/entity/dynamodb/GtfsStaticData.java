@@ -40,6 +40,7 @@ public class GtfsStaticData {
     }
 
     public @Nullable TYPE getType() {
+        if (agencyType == null) return null;
         String[] split = agencyType.split(":");
         if (split.length <= 1) {
             return null;
