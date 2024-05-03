@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -123,23 +124,26 @@ public class GtfsRealtimeParserService {
         var arrival = currStopTimeUpdate.getArrival();
         var departure = currStopTimeUpdate.getDeparture();
         var timezone = tripMap.getTimezone();
-        if (currStopTimeUpdate.hasDeparture() && departure.hasTime()) {
-            var actualDeparture = departure.getTime();
-            var expectedDeparture = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-            if (isEmpty(expectedDeparture) || isEmpty(timezone) || expectedDeparture.isEmpty()) {
-                return null;
+        try {
+            if (currStopTimeUpdate.hasDeparture() && departure.hasTime()) {
+                var actualDeparture = departure.getTime();
+                var expectedDeparture = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
+                if (isEmpty(expectedDeparture) || isEmpty(timezone) || expectedDeparture.isEmpty()) {
+                    return null;
+                }
+                return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedDeparture.get(), actualDeparture, timezone);
+            } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime()) {
+                var actualArrival = arrival.getTime();
+                var expectedArrival = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
+                if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
+                    return null;
+                }
+                return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone);
             }
-            return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedDeparture.get(), actualDeparture, timezone);
-        } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime()) {
-            var actualArrival = arrival.getTime();
-            var expectedArrival = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-            if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
-                return null;
-            }
-            return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone);
-        } else {
-            return null;
+        } catch (DateTimeParseException parseException) {
+            log.error("Unable to parse date for tripUpdate: {}", tu);
         }
+        return null;
     }
 
     private static Optional<GtfsRealtime.TripUpdate.StopTimeUpdate> getFirstScheduled(GtfsRealtime.TripUpdate tripUpdate) {

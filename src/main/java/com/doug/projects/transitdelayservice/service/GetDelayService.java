@@ -4,7 +4,6 @@ import com.doug.projects.transitdelayservice.entity.GraphOptions;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import com.doug.projects.transitdelayservice.util.LineGraphUtil;
 import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
@@ -28,7 +27,6 @@ import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumn
 @Slf4j
 public class GetDelayService {
     private final AgencyRouteTimestampRepository repository;
-    private final GtfsStaticRepository gtfsStaticRepository;
     private final LineGraphUtil lineGraphUtil;
 
 
@@ -99,7 +97,7 @@ public class GetDelayService {
         final List<String> finalRoutes = CollectionUtils.isEmpty(graphOptions.getRoutes()) ? Collections.emptyList() : graphOptions.getRoutes();
         final boolean useGtfsColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
         if (startTime >= endTime)
-            throw new IllegalArgumentException("startTime must be greater than endTime");
+            return Mono.error(new IllegalArgumentException("StartTime must be less than endTime"));
 
         return repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId).map(routeTimestampsMap -> {
             return routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {

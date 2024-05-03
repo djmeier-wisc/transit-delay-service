@@ -25,10 +25,7 @@ import java.time.Duration;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -36,7 +33,6 @@ import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticDa
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.replaceGreaterThan24Hr;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
 import static io.micrometer.common.util.StringUtils.isNotEmpty;
-import static java.util.stream.Collectors.groupingBy;
 
 @Service
 @RequiredArgsConstructor
@@ -210,35 +206,43 @@ public class GtfsStaticParserService {
      * @param gtfsList the gtfsList to be modified by this method
      */
     public static void interpolateDelay(List<GtfsStaticData> gtfsList) {
-        for (List<GtfsStaticData> sameTripStops : gtfsList.stream().collect(groupingBy(GtfsStaticData::getId)).values()) {
-            int startDepartureIndex = 0;
-            int startArrivalIndex = 0;
-            for (int i = 1; i < sameTripStops.size(); i++) {
-                GtfsStaticData sameTripStop = sameTripStops.get(i);
-                if (isNotEmpty(sameTripStop.getDepartureTime())) {
-                    LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStops.get(startDepartureIndex).getDepartureTime()));
+        gtfsList.sort(Comparator.comparing(GtfsStaticData::getId, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(GtfsStaticData::getStopSequence, Comparator.nullsLast(Comparator.naturalOrder())));
+        int startDepartureIndex = 0;
+        int startArrivalIndex = 0;
+        for (int i = 1; i < gtfsList.size(); i++) {
+            GtfsStaticData sameTripStop = gtfsList.get(i);
+            if (isNotEmpty(sameTripStop.getDepartureTime())) {
+                try {
+                    LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(gtfsList.get(startDepartureIndex)
+                            .getDepartureTime()));
                     LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getDepartureTime()));
                     Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
-                    for (GtfsStaticData gtfsStaticData : sameTripStops.subList(startDepartureIndex + 1, i)) {
-                        gtfsStaticData.setDepartureTime(startTime.plus(difference).format(staticScheduleTimeFormatter));
-                        difference = difference.plus(difference);
+                    for (int j = startDepartureIndex + 1; j < i; j++) {
+                        GtfsStaticData gtfsStaticData = gtfsList.get(j);
+                        gtfsStaticData.setDepartureTime(startTime.plus(difference.multipliedBy(j - startDepartureIndex))
+                                .format(staticScheduleTimeFormatter));
                     }
+                } catch (DateTimeParseException ignored) {
+                } finally {
                     startDepartureIndex = i;
                 }
-                if (isNotEmpty(sameTripStop.getArrivalTime())) {
-                    try {
-                        LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStops.get(startArrivalIndex).getArrivalTime()));
-                        LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getArrivalTime()));
-                        Duration difference = Duration.between(startTime, endTime).dividedBy(i - startArrivalIndex);
-                        List<GtfsStaticData> subList = sameTripStops.subList(startArrivalIndex + 1, i);
-                        for (int j = 0; j < subList.size(); j++) {
-                            GtfsStaticData gtfsStaticData = subList.get(j);
-                            gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j + 1)).format(staticScheduleTimeFormatter));
-                        }
-                    } catch (DateTimeParseException ignored) {
-                    } finally {
-                        startArrivalIndex = i;
+            }
+            if (isNotEmpty(sameTripStop.getArrivalTime())) {
+                try {
+                    LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(gtfsList.get(startArrivalIndex)
+                            .getArrivalTime()));
+                    LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getArrivalTime()));
+                    Duration difference = Duration.between(startTime, endTime)
+                            .dividedBy(i - startArrivalIndex);
+                    for (int j = startArrivalIndex + 1; j < i; j++) {
+                        GtfsStaticData gtfsStaticData = gtfsList.get(j);
+                        gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j - startArrivalIndex))
+                                .format(staticScheduleTimeFormatter));
                     }
+                } catch (DateTimeParseException ignored) {
+                } finally {
+                    startArrivalIndex = i;
                 }
             }
         }
@@ -263,7 +267,7 @@ public class GtfsStaticParserService {
                 .with(schema)
                 .with(CsvParser.Feature.TRIM_SPACES)
                 .readValues(file)) {
-            List<GtfsStaticData> gtfsList = new ArrayList<>(100);
+            List<GtfsStaticData> gtfsList = new ArrayList<>();
             boolean isStopTimes = false;
             while (attributesIterator.hasNext()) {
                 T attributes = attributesIterator.next();
