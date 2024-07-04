@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
@@ -13,8 +14,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.doug.projects.transitdelayservice.util.TransitDateUtil.getMidnightSixDaysAgo;
-import static com.doug.projects.transitdelayservice.util.TransitDateUtil.getMidnightTonight;
+import static com.doug.projects.transitdelayservice.util.TransitDateUtil.*;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
 import static java.util.Objects.nonNull;
@@ -81,46 +81,61 @@ public class MapperService {
     }
 
     public Mono<FeatureCollection> getDelayLines(String feedId, String routeName) {
-        return routeTimestampRepository.getRouteTimestampsMapBy(getMidnightSixDaysAgo(),
+        return routeTimestampRepository.getRouteTimestampsMapBy(getMidnightOneMonthAgo(),
                         getMidnightTonight(),
                         List.of(routeName),
                         feedId)
                 .flatMapIterable(m -> m.values()
                         .stream()
                         .flatMap(Collection::stream)
-                        .flatMap(a -> a.getBusStatesCopyList().stream())
                         .toList())
                 .collectList()
-                .zipWhen(busStates -> groupStaticData(feedId, busStates),
-                        ((busStates, map) -> {
+                .zipWhen(routeTimestamps -> groupStaticData(feedId, routeTimestamps),
+                        ((routeTimestamps, map) -> {
                             var stopTimesByTripId = map.get(GtfsStaticData.TYPE.STOPTIME).stream().collect(groupingBy(GtfsStaticData::getTripId));
                             var stopsByStopId = map.get(GtfsStaticData.TYPE.STOP).stream().collect(toMap(GtfsStaticData::getId, Function.identity()));
-                            var busStatesByTripId = busStates.stream().collect(groupingBy(BusState::getTripId));
-                            List<Feature> featureList = new ArrayList<>();
+                            routeTimestamps.sort(comparing(AgencyRouteTimestamp::getTimestamp));
+                            var busStates = routeTimestamps.stream().flatMap(l -> l.getBusStatesCopyList().stream()).toList();
+                            Map<LngLatAlt, Map<LngLatAlt, Double>> delayMapping = new HashMap<>();
+
                             for (String tripId : stopTimesByTripId.keySet()) {
-                                List<BusState> busStatesForTripId = busStatesByTripId.get(tripId);
+                                List<BusState> busStatesForTripId = busStates.stream().filter(busState -> busState.getTripId().equals(tripId)).toList();
                                 List<GtfsStaticData> stopTimesForTripId = stopTimesByTripId.get(tripId);
                                 stopTimesForTripId.sort(comparing(GtfsStaticData::getStopSequence, naturalOrder()));
                                 if (busStatesForTripId == null) continue;
                                 Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream().collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getStopSequence));
                                 for (int busStateIndex = 0; busStateIndex < busStatesForTripId.size() - 1; busStateIndex++) {
+                                    Double busStateDelay = Double.valueOf(busStatesForTripId.get(busStateIndex).getDelay());
                                     Integer firstStopSequence = stopIdToSequence.get(busStatesForTripId.get(busStateIndex).getClosestStopId());
                                     Integer secondStopSequence = stopIdToSequence.get(busStatesForTripId.get(busStateIndex + 1).getClosestStopId());
                                     //this should be considered a new run, either on a new day or a repeat trip, since it has finished its route and restarted.
-                                    if (secondStopSequence < firstStopSequence) continue;
-                                    LngLatAlt[] stopPositions = new LngLatAlt[secondStopSequence - firstStopSequence];
+                                    if (secondStopSequence <= firstStopSequence) continue;
+                                    List<LngLatAlt> stopPositions = new ArrayList<>();
                                     for (int stopTimeIndex = firstStopSequence; stopTimeIndex < secondStopSequence; stopTimeIndex++) {
                                         GtfsStaticData stopTime = stopTimesForTripId.get(stopTimeIndex);
                                         GtfsStaticData stop = stopsByStopId.get(stopTime.getStopId());
-                                        stopPositions[stopTimeIndex] = new LngLatAlt(stop.getStopLon(), stop.getStopLat());
+                                        stopPositions.add(new LngLatAlt(stop.getStopLon(), stop.getStopLat()));
                                     }
-                                    LineString lineString = new LineString(stopPositions);
-                                    Feature feature = new Feature();
-                                    feature.setGeometry(lineString);
-                                    feature.setProperty("delay", busStatesForTripId.get(busStateIndex).getDelay());
-                                    featureList.add(feature);
+                                    for (int i = 0; i < stopPositions.size() - 1; i++) {
+                                        var first = stopPositions.get(i);
+                                        var second = stopPositions.get(i + 1);
+                                        delayMapping.putIfAbsent(first, new HashMap<>());
+                                        var currMappedDelay = delayMapping.get(first).getOrDefault(second, busStateDelay);
+                                        delayMapping.get(first).put(second, (currMappedDelay + busStateDelay) / 2.);
+                                    }
                                 }
                             }
+                            List<Feature> featureList = new ArrayList<>();
+                            delayMapping.forEach((from, toDelay) -> {
+                                toDelay.forEach((to, delay) -> {
+                                    Feature feature = new Feature();
+                                    LineString lineString = new LineString();
+                                    lineString.setCoordinates(List.of(from, to));
+                                    feature.setGeometry(lineString);
+                                    feature.setProperty("averageDelay", delay / 60.);
+                                    featureList.add(feature);
+                                });
+                            });
                             FeatureCollection featureCollection = new FeatureCollection();
                             featureCollection.setFeatures(featureList);
                             return featureCollection;
@@ -128,9 +143,9 @@ public class MapperService {
 
     }
 
-    private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<BusState> busStates) {
+    private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<AgencyRouteTimestamp> routeTimestamps) {
+        var busStates = routeTimestamps.stream().flatMap(s -> s.getBusStatesCopyList().stream()).toList();
         var tripIds = busStates.stream().map(BusState::getTripId).distinct().toList();
-        var stopIds = busStates.stream().map(BusState::getClosestStopId).distinct().toList();
-        return staticRepo.findShapesStopTrips(feedId, tripIds, stopIds).collect(Collectors.groupingBy(GtfsStaticData::getType));
+        return staticRepo.findStopsAndStopTimes(feedId, tripIds).collect(Collectors.groupingBy(GtfsStaticData::getType));
     }
 }

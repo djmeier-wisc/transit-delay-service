@@ -247,6 +247,18 @@ public class GtfsStaticRepository {
         });
     }
 
+    public Flux<GtfsStaticData> findAllStops(String feedId) {
+        return Flux
+                .from(table
+                        .index(AGENCY_TYPE_INDEX)
+                        .query(QueryConditional
+                                .keyEqualTo(Key
+                                        .builder()
+                                        .partitionValue(feedId + ":" + STOP)
+                                        .build())))
+                .flatMapIterable(Page::items);
+    }
+
     public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
         return Flux.fromIterable(DynamoUtils.chunkList(tripIds, 100)).flatMap(chunkedList -> {
             List<ReadBatch> readBatches = chunkedList
@@ -265,8 +277,8 @@ public class GtfsStaticRepository {
         });
     }
 
-    public Flux<GtfsStaticData> findShapesStopTrips(String feedId, List<String> tripIds, List<String> stopIds) {
-        return Flux.concat(findAllStops(feedId, stopIds), findAllStopTimes(feedId, tripIds));
+    public Flux<GtfsStaticData> findStopsAndStopTimes(String feedId, List<String> tripIds) {
+        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds));
     }
 
     public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {

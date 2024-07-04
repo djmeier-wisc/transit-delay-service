@@ -14,6 +14,12 @@ public class TransitDateUtil {
         return LocalDateTime.of(ldt.minusDays(6).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
     }
 
+    public static long getMidnightOneMonthAgo() {
+        LocalDateTime ldt = LocalDateTime.now();
+        LocalTime midnight = LocalTime.MIDNIGHT;
+        return LocalDateTime.of(ldt.minusMonths(1).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+    }
+
     public static long getMidnightTonight() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
