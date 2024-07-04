@@ -92,7 +92,7 @@ public class CronService {
     public void refreshOutdatedFeeds() {
         if (!doesRealtimeCronRun)
             return;
-        log.info("Starting realtime data write");
+        log.info("Starting realtime data write, with static data polling");
         CompletableFuture<?>[] allFutures =
                 agencyFeedRepository.getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE)
                         .stream()
@@ -104,6 +104,6 @@ public class CronService {
 
         CompletableFuture.allOf(allFutures).join();
 
-        log.info("Finished realtime data write");
+        log.info("Finished realtime data write, with static data polling");
     }
 }
