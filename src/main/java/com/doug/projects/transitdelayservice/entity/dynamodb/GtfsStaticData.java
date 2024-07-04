@@ -5,6 +5,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.*;
 
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
+
 @Data
 @DynamoDbBean
 @Builder
@@ -32,6 +34,8 @@ public class GtfsStaticData {
     private String stopId;
     private Double stopLat;
     private Double stopLon;
+    private String shapeId;
+    private Integer shapeSequenceNo;
 
     public void setAgencyType(String agencyId, TYPE type) {
         this.agencyType = agencyId + ":" + type.getName();
@@ -64,11 +68,11 @@ public class GtfsStaticData {
         };
     }
 
-    public String getStopSequence() {
+    public Integer getStopSequence() {
         if (getType() != TYPE.STOPTIME) {
             return null;
         }
-        return StringUtils.substringAfter(id, ":");
+        return toInt(StringUtils.substringAfter(id, ":"));
     }
 
     /**
@@ -79,8 +83,12 @@ public class GtfsStaticData {
      */
     @Getter
     public enum TYPE {
-        AGENCY("AGENCY", "agency.csv"), ROUTE("ROUTE", "routes.csv"), TRIP("TRIP", "trips.csv"), STOP("STOP", "stops.csv"), STOPTIME("STOPTIME",
-                "stop_times.csv");
+        AGENCY("AGENCY", "agency.csv"),
+        ROUTE("ROUTE", "routes.csv"),
+        TRIP("TRIP", "trips.csv"),
+        STOP("STOP", "stops.csv"),
+        STOPTIME("STOPTIME", "stop_times.csv"),
+        SHAPE("SHAPE", "shapes.csv");
         private final String name;
         private final String fileName;
 

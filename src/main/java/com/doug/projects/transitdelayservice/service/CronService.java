@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,11 +40,18 @@ public class CronService {
             return;
         try {
             log.info("Gathering Feeds...");
-            var feeds = gtfsFeedAggregator.gatherRTFeeds();
-            log.info("Gathered Feeds. Writing feeds to table...");
-            agencyFeedRepository.removeAllAgencyFeeds();
-            agencyFeedRepository.writeAgencyFeeds(feeds);
-            log.info("Wrote feeds successfully.");
+            var newFeed = gtfsFeedAggregator.gatherRTFeeds();
+            log.info("Gathered Feeds. Writing newFeed to table...");
+            var oldFeeds = agencyFeedRepository.getAllAgencyFeeds();
+            for (AgencyFeed feed : newFeed) {
+                for (AgencyFeed oldFeed : oldFeeds) {
+                    if (feed.getId().equals(oldFeed.getId())) {
+                        feed.setTimezone(oldFeed.getTimezone());
+                    }
+                }
+            }
+            agencyFeedRepository.writeAgencyFeeds(newFeed);
+            log.info("Wrote newFeed successfully.");
         } catch (Exception e) {
             log.error("Failed to write gtfs static data", e);
         }
@@ -60,6 +68,7 @@ public class CronService {
         CompletableFuture<?>[] allFutures =
                 agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
                         .stream()
+                        .filter(f -> "437".equals(f.getId()))
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
                                         .thenApplyAsync(retryOnFailureService::reCheckFailures, retryExecutor)

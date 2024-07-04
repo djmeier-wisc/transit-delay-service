@@ -23,8 +23,7 @@ import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_ID_INDEX;
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOP;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseFirstPartInt;
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseLastPartInt;
 import static java.util.Comparator.*;
@@ -225,7 +224,7 @@ public class GtfsStaticRepository {
 
     public Flux<GtfsStaticData> findAllStopTimes(String feedId, Collection<String> trips) {
         return Flux.fromIterable(trips).flatMap(trip -> {
-            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + STOPTIME).sortValue(trip).build());
+            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + STOPTIME).sortValue(trip).build());
             return Flux.from(table.index(AGENCY_TYPE_ID_INDEX).query(queryConditional).flatMapIterable(Page::items));
         });
     }
@@ -239,6 +238,46 @@ public class GtfsStaticRepository {
                                     .builder()
                                     .partitionValue(e)
                                     .sortValue(feedId + ":" + STOP)
+                                    .build())
+                            .mappedTableResource(table)
+                            .build())
+                    .toList();
+            BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
+            return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
+        });
+    }
+
+    public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
+        return Flux.fromIterable(DynamoUtils.chunkList(tripIds, 100)).flatMap(chunkedList -> {
+            List<ReadBatch> readBatches = chunkedList
+                    .stream()
+                    .map(e -> ReadBatch.builder(GtfsStaticData.class)
+                            .addGetItem(Key
+                                    .builder()
+                                    .partitionValue(e) //TODO this wouldn't be the partitionValue here
+                                    .sortValue(feedId + ":" + SHAPE)
+                                    .build())
+                            .mappedTableResource(table)
+                            .build())
+                    .toList();
+            BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
+            return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
+        });
+    }
+
+    public Flux<GtfsStaticData> findShapesStopTrips(String feedId, List<String> tripIds, List<String> stopIds) {
+        return Flux.concat(findAllStops(feedId, stopIds), findAllStopTimes(feedId, tripIds));
+    }
+
+    public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {
+        return Flux.fromIterable(DynamoUtils.chunkList(tripIds, 100)).flatMap(chunkedList -> {
+            List<ReadBatch> readBatches = chunkedList
+                    .stream()
+                    .map(e -> ReadBatch.builder(GtfsStaticData.class)
+                            .addGetItem(Key
+                                    .builder()
+                                    .partitionValue(e)
+                                    .sortValue(feedId + ":" + TRIP)
                                     .build())
                             .mappedTableResource(table)
                             .build())

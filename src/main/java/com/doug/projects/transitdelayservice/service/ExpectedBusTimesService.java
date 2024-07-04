@@ -10,8 +10,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
-import static org.apache.commons.lang3.math.NumberUtils.toInt;
-
 @Service
 @RequiredArgsConstructor
 public class ExpectedBusTimesService {
@@ -28,8 +26,8 @@ public class ExpectedBusTimesService {
                     var agencyData = tuple.getT2();
                     ExpectedBusTimes map = new ExpectedBusTimes();
                     for (GtfsStaticData data : staticData) {
-                        map.putDeparture(data.getTripId(), toInt(data.getStopSequence()), data.getDepartureTime());
-                        map.putArrival(data.getTripId(), toInt(data.getStopSequence()), data.getArrivalTime());
+                        map.putDeparture(data.getTripId(), data.getStopSequence(), data.getDepartureTime());
+                        map.putArrival(data.getTripId(), data.getStopSequence(), data.getArrivalTime());
                     }
                     map.setTimezone(agencyData.getTimezone());
                     return map;
