@@ -15,7 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
 
 @Service
 @RequiredArgsConstructor
@@ -64,7 +64,7 @@ public class CronService {
     }
 
     /**
-     * Writes all ACT agency's data to DynamoDb for processing.
+     * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
      */
     @Scheduled(fixedDelay = 5, timeUnit = TimeUnit.MINUTES)
     public void writeGtfsRealtimeData() {
@@ -72,11 +72,33 @@ public class CronService {
             return;
         log.info("Starting realtime data write");
         CompletableFuture<?>[] allFutures =
-                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
+                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED)
                         .stream()
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
-                                        .thenApplyAsync(retryOnFailureService::reCheckFailures, retryExecutor)
+                                        .thenApplyAsync(retryOnFailureService::updateFeedStatus, retryExecutor)
+                                        .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
+                        .toArray(CompletableFuture[]::new);
+
+        CompletableFuture.allOf(allFutures).join();
+
+        log.info("Finished realtime data write");
+    }
+
+    /**
+     * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
+     */
+    @Scheduled(fixedDelay = 7, timeUnit = TimeUnit.DAYS)
+    public void refreshOutdatedFeeds() {
+        if (!doesRealtimeCronRun)
+            return;
+        log.info("Starting realtime data write");
+        CompletableFuture<?>[] allFutures =
+                agencyFeedRepository.getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE)
+                        .stream()
+                        .map(feed ->
+                                rtResponseService.convertFromAsync(feed, 60)
+                                        .thenApplyAsync(retryOnFailureService::pollStaticFeedIfNeeded, retryExecutor)
                                         .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
                         .toArray(CompletableFuture[]::new);
 
