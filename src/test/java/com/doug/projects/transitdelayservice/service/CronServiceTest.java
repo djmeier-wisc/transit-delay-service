@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
 import static org.mockito.Mockito.*;
 
 
@@ -67,18 +67,34 @@ class CronServiceTest {
     }
 
     @Test
-    void writeGtfsRealtimeData() {
+    void refreshFeed() {
         ReflectionTestUtils.setField(cronService, "doesRealtimeCronRun", true);
-        when(agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE))
+        when(agencyFeedRepository.getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE))
+                .thenReturn(getAgencyFeedList());
+        when(rtResponseService.convertFromAsync(eq(getAgencyFeedActive()), anyInt()))
+                .thenReturn(CompletableFuture.completedFuture(getResponse()));
+        ReflectionTestUtils.setField(cronService, "retryExecutor", executor);
+        ReflectionTestUtils.setField(cronService, "dynamoExecutor", executor);
+        cronService.refreshOutdatedFeeds();
+        verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE);
+        verify(rtResponseService, times(1)).convertFromAsync(eq(getAgencyFeedActive()), anyInt());
+        verify(retryOnFailureService, times(1)).pollStaticFeedIfNeeded(eq(getResponse()));
+        verify(routeTimestampRepository, times(1)).saveAll(eq(Collections.emptyList()));
+    }
+
+    @Test
+    void writeAllTypesDuringRealtimeCheck() {
+        ReflectionTestUtils.setField(cronService, "doesRealtimeCronRun", true);
+        when(agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED))
                 .thenReturn(getAgencyFeedList());
         when(rtResponseService.convertFromAsync(eq(getAgencyFeedActive()), anyInt()))
                 .thenReturn(CompletableFuture.completedFuture(getResponse()));
         ReflectionTestUtils.setField(cronService, "retryExecutor", executor);
         ReflectionTestUtils.setField(cronService, "dynamoExecutor", executor);
         cronService.writeGtfsRealtimeData();
-        verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatus(eq(ACTIVE));
+        verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED);
         verify(rtResponseService, times(1)).convertFromAsync(eq(getAgencyFeedActive()), anyInt());
-        verify(retryOnFailureService, times(1)).reCheckFailures(eq(getResponse()));
+        verify(retryOnFailureService, times(1)).updateFeedStatus(any());
         verify(routeTimestampRepository, times(1)).saveAll(eq(Collections.emptyList()));
     }
 

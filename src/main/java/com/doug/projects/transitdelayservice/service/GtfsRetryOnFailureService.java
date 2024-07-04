@@ -26,10 +26,20 @@ public class GtfsRetryOnFailureService {
     private final GtfsStaticParserService staticParserService;
     private final GtfsRealtimeParserService realtimeParserService;
 
-    public List<AgencyRouteTimestamp> reCheckFailures(AgencyRealtimeResponse realtimeResponse) {
+    public List<AgencyRouteTimestamp> pollStaticFeedIfNeeded(AgencyRealtimeResponse realtimeResponse) {
         AgencyFeed.Status feedStatus = realtimeResponse.getFeedStatus();
         AgencyFeed feed = realtimeResponse.getFeed();
         recheckFeedByStatus(feedStatus, feed);
+        if (CollectionUtils.isEmpty(realtimeResponse.getRouteTimestamps())) {
+            return Collections.emptyList();
+        }
+        return realtimeResponse.getRouteTimestamps();
+    }
+
+    public List<AgencyRouteTimestamp> updateFeedStatus(AgencyRealtimeResponse realtimeResponse) {
+        AgencyFeed.Status feedStatus = realtimeResponse.getFeedStatus();
+        AgencyFeed feed = realtimeResponse.getFeed();
+        updateFeedToStatus(feed, feedStatus);
         if (CollectionUtils.isEmpty(realtimeResponse.getRouteTimestamps())) {
             return Collections.emptyList();
         }
@@ -54,8 +64,7 @@ public class GtfsRetryOnFailureService {
     private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
         switch (feedStatus) {
             case ACTIVE -> {
-                if (!feed.getStatus()
-                        .equals(ACTIVE)) {
+                if (!feed.getStatus().equals(ACTIVE.toString())) {
                     updateFeedToStatus(feed, ACTIVE);
                 }
             }

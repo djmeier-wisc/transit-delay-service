@@ -14,6 +14,7 @@ import software.amazon.awssdk.enhanced.dynamodb.model.Page;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
 import software.amazon.awssdk.enhanced.dynamodb.model.WriteBatch;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -68,12 +69,12 @@ public class AgencyFeedRepository {
                 .join();
     }
 
-    public List<AgencyFeed> getAgencyFeedsByStatus(AgencyFeed.Status status) {
-        return Flux.concat(table
+    public List<AgencyFeed> getAgencyFeedsByStatus(AgencyFeed.Status... statusList) {
+        return Flux.concat(Arrays.stream(statusList).map(status -> table
                         .query(q ->
                                 q.queryConditional(
                                         QueryConditional.keyEqualTo(k -> k.partitionValue(status.toString()))))
-                        .items())
+                        .items()).toList())
                 .collectList()
                 .toFuture()
                 .join();
