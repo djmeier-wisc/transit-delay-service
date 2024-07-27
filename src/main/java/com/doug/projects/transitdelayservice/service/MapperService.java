@@ -3,6 +3,7 @@ package com.doug.projects.transitdelayservice.service;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
+import com.doug.projects.transitdelayservice.entity.transit.DelayAndShapeId;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,85 @@ public class MapperService {
         feature.setProperties(Map.of("averageDelay", avgDelay.getAsDouble() / 60));
         feature.setProperties(Map.of("maxDelay", Arrays.stream(delay).max()));
         return feature;
+    }
+
+    public static List<LngLatAlt> divideShape(List<GtfsStaticData> gtfsStaticData, LngLatAlt from, LngLatAlt to) {
+        gtfsStaticData = new ArrayList<>(gtfsStaticData);
+        gtfsStaticData.sort(Comparator.comparingInt(GtfsStaticData::getSequence));
+
+        // Find the closest shape points for 'from' and 'to'
+        int fromIndex = getClosestPointIndex(from, gtfsStaticData, true);
+        int toIndex = getClosestPointIndex(to, gtfsStaticData, false);
+
+        if (fromIndex < 0 || toIndex < 0) {
+            return Collections.emptyList(); // Return an empty list if any point is not found
+        }
+
+        if (fromIndex > toIndex) {
+            // If fromShape comes after toIndex in the sequence, swap them
+            int temp = fromIndex;
+            fromIndex = toIndex;
+            toIndex = temp;
+        }
+
+        return gtfsStaticData.subList(fromIndex, toIndex + 1).stream().map(MapperService::toLngLatAlt).toList();
+    }
+
+    private static LngLatAlt toLngLatAlt(GtfsStaticData staticData) {
+        LngLatAlt lngLatAlt = new LngLatAlt();
+        lngLatAlt.setLatitude(staticData.getStopLat());
+        lngLatAlt.setLongitude(staticData.getStopLon());
+        return lngLatAlt;
+    }
+
+    /**
+     * Gets the closest point index.
+     *
+     * @param point           the point we search shapes against
+     * @param shapes          a list of gtfs shape data, used to compare distance
+     * @param findLowestIndex if multiple distances are equal, whether to return the lowest or highest one
+     * @return the index of the shape closes to point
+     */
+    private static int getClosestPointIndex(LngLatAlt point, List<GtfsStaticData> shapes, boolean findLowestIndex) {
+        double minDistance = Double.MAX_VALUE;
+        int closestPoint = -1;
+        if (findLowestIndex) { //record the lowest index, provided there are two equal ones
+            for (int i = 0; i < shapes.size(); i++) {
+                GtfsStaticData shape = shapes.get(i);
+                double distance = haversineDistance(point.getLatitude(), point.getLongitude(), shape.getStopLat(), shape.getStopLon());
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestPoint = i;
+                }
+            }
+        } else {
+            for (int i = shapes.size() - 1; i >= 0; i--) {
+                GtfsStaticData shape = shapes.get(i);
+                double distance = haversineDistance(point.getLatitude(), point.getLongitude(), shape.getStopLat(), shape.getStopLon());
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestPoint = i;
+                }
+            }
+        }
+
+        return closestPoint;
+    }
+
+    /**
+     * Haversine distance algorithm, which does not account for height.
+     *
+     * @return the distance between the two points, as a double
+     */
+    private static double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371; // Earth radius in kilometers
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     /**
@@ -94,16 +174,18 @@ public class MapperService {
                         ((routeTimestamps, map) -> {
                             var stopTimesByTripId = map.get(GtfsStaticData.TYPE.STOPTIME).stream().collect(groupingBy(GtfsStaticData::getTripId));
                             var stopsByStopId = map.get(GtfsStaticData.TYPE.STOP).stream().collect(toMap(GtfsStaticData::getId, Function.identity()));
+                            var shapesByShapeId = map.get(GtfsStaticData.TYPE.SHAPE).stream().collect(groupingBy(GtfsStaticData::getShapeIdFromId));
+                            var tripsByTripId = map.get(GtfsStaticData.TYPE.TRIP).stream().collect(toMap(GtfsStaticData::getTripId, Function.identity()));
                             routeTimestamps.sort(comparing(AgencyRouteTimestamp::getTimestamp));
                             var busStates = routeTimestamps.stream().flatMap(l -> l.getBusStatesCopyList().stream()).toList();
-                            Map<LngLatAlt, Map<LngLatAlt, Double>> delayMapping = new HashMap<>();
+                            Map<LngLatAlt, Map<LngLatAlt, DelayAndShapeId>> delayMapping = new HashMap<>();
 
                             for (String tripId : stopTimesByTripId.keySet()) {
+                                String shapeId = tripsByTripId.get(tripId).getShapeId();
                                 List<BusState> busStatesForTripId = busStates.stream().filter(busState -> busState.getTripId().equals(tripId)).toList();
                                 List<GtfsStaticData> stopTimesForTripId = stopTimesByTripId.get(tripId);
-                                stopTimesForTripId.sort(comparing(GtfsStaticData::getStopSequence, naturalOrder()));
-                                if (busStatesForTripId == null) continue;
-                                Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream().collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getStopSequence));
+                                stopTimesForTripId.sort(comparing(GtfsStaticData::getSequence, naturalOrder()));
+                                Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream().collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getSequence));
                                 for (int busStateIndex = 0; busStateIndex < busStatesForTripId.size() - 1; busStateIndex++) {
                                     Double busStateDelay = Double.valueOf(busStatesForTripId.get(busStateIndex).getDelay());
                                     Integer firstStopSequence = stopIdToSequence.get(busStatesForTripId.get(busStateIndex).getClosestStopId());
@@ -117,22 +199,22 @@ public class MapperService {
                                         stopPositions.add(new LngLatAlt(stop.getStopLon(), stop.getStopLat()));
                                     }
                                     for (int i = 0; i < stopPositions.size() - 1; i++) {
-                                        var first = stopPositions.get(i);
-                                        var second = stopPositions.get(i + 1);
-                                        delayMapping.putIfAbsent(first, new HashMap<>());
-                                        var currMappedDelay = delayMapping.get(first).getOrDefault(second, busStateDelay);
-                                        delayMapping.get(first).put(second, (currMappedDelay + busStateDelay) / 2.);
+                                        var from = stopPositions.get(i);
+                                        var to = stopPositions.get(i + 1);
+                                        delayMapping.computeIfAbsent(from, k -> new HashMap<>());
+                                        var currDelayAndShape = delayMapping.get(from).computeIfAbsent(to, k -> DelayAndShapeId.builder().shapeId(shapeId).delay(busStateDelay).build());
+                                        currDelayAndShape.setDelay((currDelayAndShape.getDelay() + busStateDelay) / 2.);
                                     }
                                 }
                             }
                             List<Feature> featureList = new ArrayList<>();
                             delayMapping.forEach((from, toDelay) -> {
-                                toDelay.forEach((to, delay) -> {
+                                toDelay.forEach((to, delayAndShape) -> {
                                     Feature feature = new Feature();
                                     LineString lineString = new LineString();
-                                    lineString.setCoordinates(List.of(from, to));
+                                    lineString.setCoordinates(divideShape(shapesByShapeId.get(delayAndShape.getShapeId()), from, to));
                                     feature.setGeometry(lineString);
-                                    feature.setProperty("averageDelay", delay / 60.);
+                                    feature.setProperty("averageDelay", delayAndShape.getDelay() / 60.);
                                     featureList.add(feature);
                                 });
                             });
@@ -140,12 +222,11 @@ public class MapperService {
                             featureCollection.setFeatures(featureList);
                             return featureCollection;
                         }));
-
     }
 
     private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<AgencyRouteTimestamp> routeTimestamps) {
         var busStates = routeTimestamps.stream().flatMap(s -> s.getBusStatesCopyList().stream()).toList();
         var tripIds = busStates.stream().map(BusState::getTripId).distinct().toList();
-        return staticRepo.findStopsAndStopTimes(feedId, tripIds).collect(Collectors.groupingBy(GtfsStaticData::getType));
+        return staticRepo.findStopsTimesAndShapes(feedId, tripIds).collect(Collectors.groupingBy(GtfsStaticData::getType));
     }
 }

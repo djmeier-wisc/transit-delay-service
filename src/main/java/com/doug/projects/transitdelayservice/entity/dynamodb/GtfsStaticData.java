@@ -35,7 +35,6 @@ public class GtfsStaticData {
     private Double stopLat;
     private Double stopLon;
     private String shapeId;
-    private Integer shapeSequenceNo;
 
     public void setAgencyType(String agencyId, TYPE type) {
         this.agencyType = agencyId + ":" + type.getName();
@@ -68,8 +67,15 @@ public class GtfsStaticData {
         };
     }
 
-    public Integer getStopSequence() {
-        if (getType() != TYPE.STOPTIME) {
+    public String getShapeIdFromId() {
+        if (!getType().equals(TYPE.SHAPE)) {
+            return null;
+        }
+        return StringUtils.substringBefore(id, ":");
+    }
+
+    public Integer getSequence() {
+        if (getType() != TYPE.STOPTIME && getType() != TYPE.SHAPE) {
             return null;
         }
         return toInt(StringUtils.substringAfter(id, ":"));

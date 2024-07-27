@@ -26,8 +26,8 @@ public class ExpectedBusTimesService {
                     var agencyData = tuple.getT2();
                     ExpectedBusTimes map = new ExpectedBusTimes();
                     for (GtfsStaticData data : staticData) {
-                        map.putDeparture(data.getTripId(), data.getStopSequence(), data.getDepartureTime());
-                        map.putArrival(data.getTripId(), data.getStopSequence(), data.getArrivalTime());
+                        map.putDeparture(data.getTripId(), data.getSequence(), data.getDepartureTime());
+                        map.putArrival(data.getTripId(), data.getSequence(), data.getArrivalTime());
                     }
                     map.setTimezone(agencyData.getTimezone());
                     return map;

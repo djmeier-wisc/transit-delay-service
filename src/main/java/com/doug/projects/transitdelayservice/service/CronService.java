@@ -68,7 +68,7 @@ public class CronService {
         CompletableFuture<?>[] allFutures =
                 agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
                         .stream()
-                        .filter(f -> "437".equals(f.getId()))
+                        .filter(f -> "394".equals(f.getId()))
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
                                         .thenApplyAsync(retryOnFailureService::reCheckFailures, retryExecutor)

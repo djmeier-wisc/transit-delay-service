@@ -259,26 +259,36 @@ public class GtfsStaticRepository {
                 .flatMapIterable(Page::items);
     }
 
+    /**
+     * Gets the trips associated with feedId and tripIds, gathers the shapeId from the results, and queries again for shape data
+     * <br/>
+     * This isn't ideal for performance, but it saves on costs associated with storing a shape for each trip.
+     * <br/>
+     * Every day I regret choosing a non-relational database for <strong>obviously</strong> relational GTFS data
+     *
+     * @param feedId
+     * @param tripIds
+     * @return
+     */
     public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
-        return Flux.fromIterable(DynamoUtils.chunkList(tripIds, 100)).flatMap(chunkedList -> {
-            List<ReadBatch> readBatches = chunkedList
-                    .stream()
-                    .map(e -> ReadBatch.builder(GtfsStaticData.class)
-                            .addGetItem(Key
-                                    .builder()
-                                    .partitionValue(e) //TODO this wouldn't be the partitionValue here
-                                    .sortValue(feedId + ":" + SHAPE)
-                                    .build())
-                            .mappedTableResource(table)
-                            .build())
-                    .toList();
-            BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
-            return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
-        });
+        return findAllTrips(feedId, tripIds)
+                .map(GtfsStaticData::getShapeId)
+                .distinct()
+                .flatMap(shapeId ->
+                        table.index(AGENCY_TYPE_ID_INDEX).query(QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))
+                ).flatMapIterable(Page::items);
     }
 
-    public Flux<GtfsStaticData> findStopsAndStopTimes(String feedId, List<String> tripIds) {
-        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds));
+    /**
+     * Gathers stops, stopTimes, and shapes for tripIds concurrently.
+     * This would have been a lot easier with a relational database, but here we are
+     *
+     * @param feedId
+     * @param tripIds
+     * @return
+     */
+    public Flux<GtfsStaticData> findStopsTimesAndShapes(String feedId, List<String> tripIds) {
+        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
     }
 
     public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {
