@@ -7,10 +7,13 @@ import com.doug.projects.transitdelayservice.entity.transit.DelayAndShapeId;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import lombok.RequiredArgsConstructor;
+import org.geojson.Point;
 import org.geojson.*;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.awt.*;
+import java.util.List;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -160,6 +163,17 @@ public class MapperService {
         });
     }
 
+    private static String getHexColor(double minAvgDelay, double maxAvgDelay, DelayAndShapeId delayAndShape) {
+        double averageDelay = delayAndShape.getDelay();
+        double ratio = (averageDelay - minAvgDelay) / (maxAvgDelay - minAvgDelay);
+        Color green = Color.GREEN;
+        Color red = Color.RED;
+        int r = (int) (red.getRed() * ratio + green.getRed() * (1 - ratio));
+        int g = (int) (red.getGreen() * ratio + green.getGreen() * (1 - ratio));
+        int b = (int) (red.getBlue() * ratio + green.getBlue() * (1 - ratio));
+        return "#" + Integer.toHexString(new Color(r, g, b).getRGB()).substring(2);
+    }
+
     public Mono<FeatureCollection> getDelayLines(String feedId, String routeName) {
         return routeTimestampRepository.getRouteTimestampsMapBy(getMidnightOneMonthAgo(),
                         getMidnightTonight(),
@@ -208,6 +222,8 @@ public class MapperService {
                                 }
                             }
                             List<Feature> featureList = new ArrayList<>();
+                            double maxAvgDelay = getMaxAvgDelay(delayMapping);
+                            double minAvgDelay = getMinAvgDelay(delayMapping);
                             delayMapping.forEach((from, toDelay) -> {
                                 toDelay.forEach((to, delayAndShape) -> {
                                     Feature feature = new Feature();
@@ -215,6 +231,7 @@ public class MapperService {
                                     lineString.setCoordinates(divideShape(shapesByShapeId.get(delayAndShape.getShapeId()), from, to));
                                     feature.setGeometry(lineString);
                                     feature.setProperty("averageDelay", delayAndShape.getDelay() / 60.);
+                                    feature.setProperty("stroke", getHexColor(minAvgDelay, maxAvgDelay, delayAndShape));
                                     featureList.add(feature);
                                 });
                             });
@@ -223,6 +240,15 @@ public class MapperService {
                             return featureCollection;
                         }));
     }
+
+    private double getMinAvgDelay(Map<LngLatAlt, Map<LngLatAlt, DelayAndShapeId>> delayMapping) {
+        return delayMapping.values().stream().flatMap(map -> map.values().stream()).mapToDouble(DelayAndShapeId::getDelay).min().orElse(-1);
+    }
+
+    private double getMaxAvgDelay(Map<LngLatAlt, Map<LngLatAlt, DelayAndShapeId>> delayMapping) {
+        return delayMapping.values().stream().flatMap(map -> map.values().stream()).mapToDouble(DelayAndShapeId::getDelay).max().orElse(-1);
+    }
+
 
     private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<AgencyRouteTimestamp> routeTimestamps) {
         var busStates = routeTimestamps.stream().flatMap(s -> s.getBusStatesCopyList().stream()).toList();
