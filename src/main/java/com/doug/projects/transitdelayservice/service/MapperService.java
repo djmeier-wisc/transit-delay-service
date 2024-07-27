@@ -199,7 +199,7 @@ public class MapperService {
                                 List<BusState> busStatesForTripId = busStates.stream().filter(busState -> busState.getTripId().equals(tripId)).toList();
                                 List<GtfsStaticData> stopTimesForTripId = stopTimesByTripId.get(tripId);
                                 stopTimesForTripId.sort(comparing(GtfsStaticData::getSequence, naturalOrder()));
-                                Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream().collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getSequence));
+                                Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream().collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getSequence, (a, b) -> a));
                                 for (int busStateIndex = 0; busStateIndex < busStatesForTripId.size() - 1; busStateIndex++) {
                                     Double busStateDelay = Double.valueOf(busStatesForTripId.get(busStateIndex).getDelay());
                                     Integer firstStopSequence = stopIdToSequence.get(busStatesForTripId.get(busStateIndex).getClosestStopId());
