@@ -10,11 +10,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.ACTIVE;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
 
 @Service
 @RequiredArgsConstructor
@@ -40,25 +41,30 @@ public class CronService {
             return;
         try {
             log.info("Gathering Feeds...");
-            var newFeed = gtfsFeedAggregator.gatherRTFeeds();
-            log.info("Gathered Feeds. Writing newFeed to table...");
-            var oldFeeds = agencyFeedRepository.getAllAgencyFeeds();
-            for (AgencyFeed feed : newFeed) {
-                for (AgencyFeed oldFeed : oldFeeds) {
-                    if (feed.getId().equals(oldFeed.getId())) {
-                        feed.setTimezone(oldFeed.getTimezone());
-                    }
-                }
-            }
-            agencyFeedRepository.writeAgencyFeeds(newFeed);
-            log.info("Wrote newFeed successfully.");
+            var newFeeds = gtfsFeedAggregator.gatherRTFeeds();
+            log.info("Gathered Feeds. Writing feeds to table...");
+            populateTimezoneFromOldFeeds(newFeeds);
+            agencyFeedRepository.removeAllAgencyFeeds();
+            agencyFeedRepository.writeAgencyFeeds(newFeeds);
+            log.info("Wrote feeds successfully.");
         } catch (Exception e) {
             log.error("Failed to write gtfs static data", e);
         }
     }
 
+    private void populateTimezoneFromOldFeeds(List<AgencyFeed> newFeeds) {
+        for (AgencyFeed oldFeed : agencyFeedRepository.getAllAgencyFeeds()) {
+            for (AgencyFeed newFeed : newFeeds) {
+                if (newFeed.getId()
+                        .equals(oldFeed.getId())) {
+                    newFeed.setTimezone(oldFeed.getTimezone());
+                }
+            }
+        }
+    }
+
     /**
-     * Writes all ACT agency's data to DynamoDb for processing.
+     * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
      */
     @Scheduled(fixedDelay = 5, timeUnit = TimeUnit.MINUTES)
     public void writeGtfsRealtimeData() {
@@ -66,17 +72,38 @@ public class CronService {
             return;
         log.info("Starting realtime data write");
         CompletableFuture<?>[] allFutures =
-                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE)
+                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED)
                         .stream()
-                        .filter(f -> "394".equals(f.getId()))
                         .map(feed ->
                                 rtResponseService.convertFromAsync(feed, 60)
-                                        .thenApplyAsync(retryOnFailureService::reCheckFailures, retryExecutor)
+                                        .thenApplyAsync(retryOnFailureService::updateFeedStatus, retryExecutor)
                                         .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
                         .toArray(CompletableFuture[]::new);
 
         CompletableFuture.allOf(allFutures).join();
 
         log.info("Finished realtime data write");
+    }
+
+    /**
+     * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
+     */
+    @Scheduled(fixedDelay = 7, timeUnit = TimeUnit.DAYS)
+    public void refreshOutdatedFeeds() {
+        if (!doesRealtimeCronRun)
+            return;
+        log.info("Starting realtime data write, with static data polling");
+        CompletableFuture<?>[] allFutures =
+                agencyFeedRepository.getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE)
+                        .stream()
+                        .map(feed ->
+                                rtResponseService.convertFromAsync(feed, 60)
+                                        .thenApplyAsync(retryOnFailureService::pollStaticFeedIfNeeded, retryExecutor)
+                                        .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
+                        .toArray(CompletableFuture[]::new);
+
+        CompletableFuture.allOf(allFutures).join();
+
+        log.info("Finished realtime data write, with static data polling");
     }
 }
