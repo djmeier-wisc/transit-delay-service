@@ -6,19 +6,26 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.entity.transit.DelayAndShapeId;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.geojson.Point;
 import org.geojson.*;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.awt.*;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.doug.projects.transitdelayservice.config.CachingConfiguration.DELAY_LINES_CACHE;
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.*;
+import static java.util.Collections.emptyList;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
 import static java.util.Objects.nonNull;
@@ -27,6 +34,7 @@ import static java.util.stream.Collectors.toMap;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MapperService {
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsStaticRepository staticRepo;
@@ -58,7 +66,7 @@ public class MapperService {
         int toIndex = getClosestPointIndex(to, gtfsStaticData, false);
 
         if (fromIndex < 0 || toIndex < 0) {
-            return Collections.emptyList(); // Return an empty list if any point is not found
+            return emptyList(); // Return an empty list if any point is not found
         }
 
         if (fromIndex > toIndex) {
@@ -174,8 +182,13 @@ public class MapperService {
         return "#" + Integer.toHexString(new Color(r, g, b).getRGB()).substring(2);
     }
 
-    public Mono<FeatureCollection> getDelayLines(String feedId, String routeName) {
-        return routeTimestampRepository.getRouteTimestampsMapBy(getMidnightOneMonthAgo(),
+    @Cacheable(value = DELAY_LINES_CACHE)
+    public Mono<FeatureCollection> getDelayLines(String feedId, String routeName, Integer numDaysAgo, Integer hourPolled) {
+        if (StringUtils.isBlank(routeName) || StringUtils.isBlank(feedId)) {
+            log.error("Failed either due to empty feedId or empty routeName");
+            return Mono.just(new FeatureCollection());
+        }
+        return routeTimestampRepository.getRouteTimestampsMapBy(getMidnightDaysAgo(numDaysAgo),
                         getMidnightTonight(),
                         List.of(routeName),
                         feedId)
@@ -183,13 +196,20 @@ public class MapperService {
                         .stream()
                         .flatMap(Collection::stream)
                         .toList())
+                .filter(routeTimestamp -> {
+                    if (hourPolled == null) {
+                        return true;
+                    }
+                    var date = Instant.ofEpochSecond(routeTimestamp.getTimestamp());
+                    return date.atZone(ZoneId.of("-5")).getHour() == hourPolled - 1;
+                })
                 .collectList()
                 .zipWhen(routeTimestamps -> groupStaticData(feedId, routeTimestamps),
                         ((routeTimestamps, map) -> {
-                            var stopTimesByTripId = map.get(GtfsStaticData.TYPE.STOPTIME).stream().collect(groupingBy(GtfsStaticData::getTripId));
-                            var stopsByStopId = map.get(GtfsStaticData.TYPE.STOP).stream().collect(toMap(GtfsStaticData::getId, Function.identity()));
-                            var shapesByShapeId = map.get(GtfsStaticData.TYPE.SHAPE).stream().collect(groupingBy(GtfsStaticData::getShapeIdFromId));
-                            var tripsByTripId = map.get(GtfsStaticData.TYPE.TRIP).stream().collect(toMap(GtfsStaticData::getTripId, Function.identity()));
+                            var stopTimesByTripId = map.getOrDefault(GtfsStaticData.TYPE.STOPTIME, emptyList()).stream().collect(groupingBy(GtfsStaticData::getTripId));
+                            var stopsByStopId = map.getOrDefault(GtfsStaticData.TYPE.STOP, emptyList()).stream().collect(toMap(GtfsStaticData::getId, Function.identity()));
+                            var shapesByShapeId = map.getOrDefault(GtfsStaticData.TYPE.SHAPE, emptyList()).stream().collect(groupingBy(GtfsStaticData::getShapeIdFromId));
+                            var tripsByTripId = map.getOrDefault(GtfsStaticData.TYPE.TRIP, emptyList()).stream().collect(toMap(GtfsStaticData::getTripId, Function.identity()));
                             routeTimestamps.sort(comparing(AgencyRouteTimestamp::getTimestamp));
                             var busStates = routeTimestamps.stream().flatMap(l -> l.getBusStatesCopyList().stream()).toList();
                             Map<LngLatAlt, Map<LngLatAlt, DelayAndShapeId>> delayMapping = new HashMap<>();
@@ -238,7 +258,8 @@ public class MapperService {
                             FeatureCollection featureCollection = new FeatureCollection();
                             featureCollection.setFeatures(featureList);
                             return featureCollection;
-                        }));
+                        }))
+                .cache();
     }
 
     private double getMinAvgDelay(Map<LngLatAlt, Map<LngLatAlt, DelayAndShapeId>> delayMapping) {

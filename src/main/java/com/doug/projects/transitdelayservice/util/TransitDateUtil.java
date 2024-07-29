@@ -26,6 +26,12 @@ public class TransitDateUtil {
         return LocalDateTime.of(ldt.plusDays(1).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
     }
 
+    public static long getMidnightDaysAgo(int daysAgo) {
+        LocalDateTime ldt = LocalDateTime.now();
+        LocalTime midnight = LocalTime.MIDNIGHT;
+        return LocalDateTime.of(ldt.minusDays(daysAgo).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+    }
+
     public static AbstractMap.SimpleEntry<Long, Long>[] getStartAndEndTimesList(long startTime, long endTime,
                                                                                 int units) {
         AbstractMap.SimpleEntry<Long, Long>[] startAndEndTimesList = new AbstractMap.SimpleEntry[units];

@@ -20,7 +20,10 @@ public class MapsController {
     }
 
     @GetMapping("/v1/map/{feedId}/delayLines")
-    public Mono<FeatureCollection> getDelayLines(@PathVariable String feedId, @RequestParam String routeName) {
-        return mapperService.getDelayLines(feedId, routeName);
+    public Mono<FeatureCollection> getDelayLines(@PathVariable String feedId,
+                                                 @RequestParam String routeName,
+                                                 @RequestParam(defaultValue = "30") Integer numDaysAgo,
+                                                 @RequestParam(required = false) Integer hourPolled) {
+        return mapperService.getDelayLines(feedId, routeName, numDaysAgo, hourPolled);
     }
 }

@@ -61,6 +61,22 @@ public class GtfsStaticRepository {
                 .forEach(this::parallelSaveAll);
     }
 
+    public void saveAll(Flux<GtfsStaticData> data) {
+        data.buffer(25)
+                .flatMap(chunkedList ->
+                        Mono.fromFuture(enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
+                        ))
+                .flatMapIterable(result ->
+                        result.unprocessedPutItemsForTable(table)
+                ).buffer(25)
+                .flatMap(chunkedFailures ->
+                        Mono.fromFuture(enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedFailures, b)))
+                ).flatMapIterable(result ->
+                        result.unprocessedPutItemsForTable(table)
+                ).log()
+                .subscribe();
+    }
+
     /**
      * Writes all items in data to table synchronously. Chunked to Dynamo's 25 item maximum.
      *
@@ -288,6 +304,9 @@ public class GtfsStaticRepository {
      * @return
      */
     public Flux<GtfsStaticData> findStopsTimesAndShapes(String feedId, List<String> tripIds) {
+        if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
+            return Flux.empty();
+        }
         return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
     }
 
