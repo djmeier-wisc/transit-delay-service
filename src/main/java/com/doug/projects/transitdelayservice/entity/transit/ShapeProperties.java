@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 @Builder
-public class DelayAndShapeId {
+public class ShapeProperties {
     String shapeId;
     Double delay;
 }

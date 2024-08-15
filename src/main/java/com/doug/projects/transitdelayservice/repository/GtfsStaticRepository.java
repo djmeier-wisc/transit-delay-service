@@ -303,7 +303,7 @@ public class GtfsStaticRepository {
      * @param tripIds
      * @return
      */
-    public Flux<GtfsStaticData> findStopsTimesAndShapes(String feedId, List<String> tripIds) {
+    public Flux<GtfsStaticData> findStaticDataFor(String feedId, List<String> tripIds) {
         if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
             return Flux.empty();
         }
