@@ -288,7 +288,7 @@ public class GtfsStaticRepository {
      */
     public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
         return findAllTrips(feedId, tripIds)
-                .map(GtfsStaticData::getShapeId)
+                .mapNotNull(GtfsStaticData::getShapeId)
                 .distinct()
                 .flatMap(shapeId ->
                         table.index(AGENCY_TYPE_ID_INDEX).query(QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))

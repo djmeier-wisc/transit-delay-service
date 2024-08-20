@@ -1,25 +1,27 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.MapOptions;
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
 import com.doug.projects.transitdelayservice.entity.transit.ShapeProperties;
+import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.geojson.Point;
 import org.geojson.*;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 
-import java.awt.*;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -39,6 +41,7 @@ import static java.util.stream.Collectors.toMap;
 public class MapperService {
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsStaticRepository staticRepo;
+    private final AgencyFeedRepository agencyFeedRepository;
 
     private static Feature pointFeatureWithDelayProperty(GtfsStaticData stop, Map<String, List<BusState>> busStatesMap) {
         List<BusState> busStatesForStop = busStatesMap.get(stop.getId());
@@ -137,18 +140,14 @@ public class MapperService {
         return R * c;
     }
 
-    private static String getHexColor(double minAvgDelay, double maxAvgDelay, ShapeProperties delayAndShape) {
-        double averageDelay = delayAndShape.getDelay();
-        double ratio = (averageDelay - minAvgDelay) / (maxAvgDelay - minAvgDelay);
-        Color green = Color.GREEN;
-        Color red = Color.RED;
-        int r = (int) (red.getRed() * ratio + green.getRed() * (1 - ratio));
-        int g = (int) (red.getGreen() * ratio + green.getGreen() * (1 - ratio));
-        int b = (int) (red.getBlue() * ratio + green.getBlue() * (1 - ratio));
-        return "#" + Integer.toHexString(new Color(r, g, b).getRGB()).substring(2);
-    }
-
-    private static @NotNull Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> getDelayMapping(List<AgencyRouteTimestamp> routeTimestamps, Map<GtfsStaticData.TYPE, List<GtfsStaticData>> map) {
+    /**
+     * Maps delays from one stop (stored as a lat and long), to another (also stored as a lat and long). Then, maps that data to the average delay between those two stops.
+     *
+     * @param routeTimestamps
+     * @param map
+     * @return
+     */
+    private static @NotNull Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> getStopDelayMapping(List<AgencyRouteTimestamp> routeTimestamps, Map<GtfsStaticData.TYPE, List<GtfsStaticData>> map) {
         var stopTimesByTripId = map.getOrDefault(GtfsStaticData.TYPE.STOPTIME, emptyList())
                 .stream()
                 .collect(groupingBy(GtfsStaticData::getTripId));
@@ -165,49 +164,72 @@ public class MapperService {
                 .collect(groupingBy(BusState::getTripId));
         Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> delayMapping = new HashMap<>();
         for (String tripId : stopTimesByTripId.keySet()) {
-            String shapeId = tripsByTripId.get(tripId)
-                    .getShapeId();
+            String shapeId = tripsByTripId.get(tripId).getShapeId();
             List<BusState> busStatesForTripId = busStatesByTripId.getOrDefault(tripId, emptyList());
             List<GtfsStaticData> stopTimesForTripId = stopTimesByTripId.getOrDefault(tripId, emptyList());
             stopTimesForTripId.sort(comparing(GtfsStaticData::getSequence, naturalOrder()));
             Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream()
                     .collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getSequence, (a, b) -> a));
             for (int busStateIndex = 0; busStateIndex < busStatesForTripId.size() - 1; busStateIndex++) {
-                Double busStateDelay = Double.valueOf(busStatesForTripId.get(busStateIndex)
-                        .getDelay());
-                Integer fromStopSeqNo = stopIdToSequence.get(busStatesForTripId.get(busStateIndex)
+                Integer fromDelay = busStatesForTripId.get(busStateIndex).getDelay();
+                if (fromDelay == null) fromDelay = 0;
+                Integer toDelay = busStatesForTripId.get(busStateIndex + 1).getDelay();
+                if (toDelay == null) toDelay = 0;
+                Integer fromStopSeq = stopIdToSequence.get(busStatesForTripId.get(busStateIndex)
                         .getClosestStopId());
-                Integer toStopSeqNo = stopIdToSequence.get(busStatesForTripId.get(busStateIndex + 1)
+                Integer toStopSeq = stopIdToSequence.get(busStatesForTripId.get(busStateIndex + 1)
                         .getClosestStopId());
                 //this should be considered a new run, either on a new day or a repeat trip, since it has finished
                 // its route and restarted.
-                if (toStopSeqNo <= fromStopSeqNo)
+                if (toStopSeq <= fromStopSeq)
                     continue;
-                List<LngLatAlt> stopPositions =
-                        getStopPositions(fromStopSeqNo, toStopSeqNo, stopTimesForTripId, stopsByStopId);
-                for (int i = 0; i < stopPositions.size() - 1; i++) {
-                    var from = stopPositions.get(i);
-                    var to = stopPositions.get(i + 1);
-                    var currDelayAndShape = delayMapping.computeIfAbsent(from, k -> new HashMap<>())
-                            .computeIfAbsent(to, k -> ShapeProperties.builder()
+                LngLatAlt[] stopPositions = getStopPositions(fromStopSeq, toStopSeq, stopTimesForTripId, stopsByStopId);
+                double[] interpolatedDelays = interpolate(fromDelay, toDelay, toStopSeq - fromStopSeq);
+                for (int i = 0; i < stopPositions.length - 1; i++) {
+                    var fromStop = stopPositions[i];
+                    var toStop = stopPositions[i + 1];
+                    double currDelay = interpolatedDelays[i];
+                    var currDelayAndShape = delayMapping
+                            .computeIfAbsent(fromStop, k -> new HashMap<>()) //build new HashMap if none are present for "from"
+                            .computeIfAbsent(toStop, k -> ShapeProperties.builder()
                                     .shapeId(shapeId)
-                                    .delay(busStateDelay)
+                                    .delay(currDelay)
                                     .build());
-                    currDelayAndShape.setDelay((currDelayAndShape.getDelay() + busStateDelay) / 2.);
+                    currDelayAndShape.setDelay((currDelayAndShape.getDelay() + fromDelay) / 2.);
                 }
             }
         }
         return delayMapping;
     }
 
-    private static @NotNull List<LngLatAlt> getStopPositions(Integer firstStopSequence, Integer secondStopSequence,
-                                                             List<GtfsStaticData> stopTimesForTripId, Map<String,
-            GtfsStaticData> stopsByStopId) {
-        List<LngLatAlt> stopPositions = new ArrayList<>();
+    /***
+     * Interpolating method
+     * @param start start of the interval
+     * @param end end of the interval
+     * @param count count of output interpolated numbers
+     * @return array of interpolated number with specified count
+     */
+    public static double[] interpolate(double start, double end, int count) {
+        if (count < 2) {
+            return new double[]{start, end};
+        }
+        double[] array = new double[count + 1];
+        for (int i = 0; i <= count; ++i) {
+            array[i] = start + i * (end - start) / count;
+        }
+        return array;
+    }
+
+    private static @NotNull LngLatAlt[] getStopPositions(Integer firstStopSequence,
+                                                         Integer secondStopSequence,
+                                                         List<GtfsStaticData> stopTimesForTripId,
+                                                         Map<String, GtfsStaticData> stopsByStopId) {
+        LngLatAlt[] stopPositions = new LngLatAlt[secondStopSequence - firstStopSequence];
         for (int stopTimeIndex = firstStopSequence; stopTimeIndex < secondStopSequence; stopTimeIndex++) {
             GtfsStaticData stopTime = stopTimesForTripId.get(stopTimeIndex);
             GtfsStaticData stop = stopsByStopId.get(stopTime.getStopId());
-            stopPositions.add(new LngLatAlt(stop.getStopLon(), stop.getStopLat()));
+            int pos = stopTimeIndex - firstStopSequence;
+            stopPositions[pos] = new LngLatAlt(stop.getStopLon(), stop.getStopLat());
         }
         return stopPositions;
     }
@@ -246,33 +268,29 @@ public class MapperService {
     }
 
     @Cacheable(value = DELAY_LINES_CACHE)
-    public Mono<FeatureCollection> getDelayLines(String feedId, String routeName, Integer numDaysAgo, Integer hourPolled) {
-        if (StringUtils.isBlank(routeName) || StringUtils.isBlank(feedId)) {
+    public Mono<FeatureCollection> getDelayLines(String feedId, MapOptions mapOptions) {
+        if (StringUtils.isBlank(mapOptions.getRouteName()) || StringUtils.isBlank(feedId)) {
             log.error("Failed either due to empty feedId or empty routeName");
             return Mono.just(new FeatureCollection());
         }
-        return routeTimestampRepository.getRouteTimestampsMapBy(getMidnightDaysAgo(numDaysAgo),
+        //this looks weird, but it was the easiest way to zip together a single timeZone with many
+        Flux<String> agencyTimezone = agencyFeedRepository.getAgencyFeedById(feedId).map(AgencyFeed::getTimezone).cache().repeat();
+        return Flux.zip(routeTimestampRepository.getRouteTimestampsBy(getMidnightDaysAgo(mapOptions.getSearchPeriod()),
                         getMidnightTonight(),
-                        List.of(routeName),
-                        feedId)
-                .flatMapIterable(m -> m.values()
-                        .stream()
-                        .flatMap(Collection::stream)
-                        .toList())
+                        List.of(mapOptions.getRouteName()),
+                        feedId), agencyTimezone)
                 .filter(routeTimestamp -> {
-                    if (hourPolled == null) {
-                        return true;
-                    }
-                    var date = Instant.ofEpochSecond(routeTimestamp.getTimestamp());
-                    return date.atZone(ZoneId.of("-5")).getHour() == hourPolled - 1;
+                    var date = Instant.ofEpochSecond(routeTimestamp.getT1().getTimestamp());
+                    var sampledHour = date.atZone(ZoneId.of(routeTimestamp.getT2())).getHour();
+                    var sampledDay = date.atZone(ZoneId.of(routeTimestamp.getT2())).getDayOfWeek();
+                    return sampledHour > mapOptions.getHourStarted() &&
+                            sampledHour < mapOptions.getHourEnded() &&
+                            mapOptions.getDaysSelected().contains(sampledDay.getValue());
                 })
+                .map(Tuple2::getT1)
                 .collectList()
                 .zipWhen(routeTimestamps -> groupStaticData(feedId, routeTimestamps),
-                        ((routeTimestamps, map) -> {
-                            Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> delayMapping =
-                                    getDelayMapping(routeTimestamps, map);
-                            return getFeatureCollection(getFeatureList(map, delayMapping));
-                        }))
+                        ((routeTimestamps, map) -> getFeatureCollection(getFeatureList(map, getStopDelayMapping(routeTimestamps, map)))))
                 .cache();
     }
 
@@ -288,8 +306,6 @@ public class MapperService {
                 .stream()
                 .collect(groupingBy(GtfsStaticData::getShapeIdFromId));
         List<Feature> featureList = new ArrayList<>();
-        double maxAvgDelay = getMaxAvgDelay(delayMapping);
-        double minAvgDelay = getMinAvgDelay(delayMapping);
         delayMapping.forEach((from, toDelay) -> {
             toDelay.forEach((to, delayAndShape) -> {
                 Feature feature = new Feature();
@@ -298,33 +314,11 @@ public class MapperService {
                 lineString.setCoordinates(divideShape(shapeData, from, to));
                 feature.setGeometry(lineString);
                 feature.setProperty("averageDelay", delayAndShape.getDelay() / 60.);
-                feature.setProperty("stroke", getHexColor(minAvgDelay, maxAvgDelay, delayAndShape));
                 featureList.add(feature);
             });
         });
         return featureList;
     }
-
-    private double getMinAvgDelay(Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> delayMapping) {
-        return delayMapping.values()
-                .stream()
-                .flatMap(map -> map.values()
-                        .stream())
-                .mapToDouble(ShapeProperties::getDelay)
-                .min()
-                .orElse(-1);
-    }
-
-    private double getMaxAvgDelay(Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> delayMapping) {
-        return delayMapping.values()
-                .stream()
-                .flatMap(map -> map.values()
-                        .stream())
-                .mapToDouble(ShapeProperties::getDelay)
-                .max()
-                .orElse(-1);
-    }
-
 
     private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<AgencyRouteTimestamp> routeTimestamps) {
         var busStates = routeTimestamps.stream().flatMap(s -> s.getBusStatesCopyList().stream()).toList();

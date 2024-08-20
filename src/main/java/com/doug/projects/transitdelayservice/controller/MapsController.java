@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.controller;
 
+import com.doug.projects.transitdelayservice.entity.MapOptions;
 import com.doug.projects.transitdelayservice.service.MapperService;
 import lombok.RequiredArgsConstructor;
 import org.geojson.FeatureCollection;
@@ -21,9 +22,7 @@ public class MapsController {
 
     @GetMapping("/v1/map/{feedId}/delayLines")
     public Mono<FeatureCollection> getDelayLines(@PathVariable String feedId,
-                                                 @RequestParam String routeName,
-                                                 @RequestParam(defaultValue = "30") Integer numDaysAgo,
-                                                 @RequestParam(required = false) Integer hourPolled) {
-        return mapperService.getDelayLines(feedId, routeName, numDaysAgo, hourPolled);
+                                                 MapOptions mapOptions) {
+        return mapperService.getDelayLines(feedId, mapOptions);
     }
 }
