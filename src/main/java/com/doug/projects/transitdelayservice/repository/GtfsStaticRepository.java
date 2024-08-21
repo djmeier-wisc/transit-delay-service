@@ -33,11 +33,13 @@ import static java.util.Comparator.*;
 public class GtfsStaticRepository {
     private final DynamoDbEnhancedAsyncClient enhancedAsyncClient;
     private final DynamoDbAsyncTable<GtfsStaticData> table;
+    private final CachedRepository cachedRepository;
 
 
-    public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient) {
+    public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient, CachedRepository cachedRepository) {
         this.enhancedAsyncClient = enhancedAsyncClient;
         this.table = enhancedAsyncClient.table("gtfsData", TableSchema.fromBean(GtfsStaticData.class));
+        this.cachedRepository = cachedRepository;
         try (var waiter = DynamoDbWaiter.create()) {
             table.createTable();
             waiter.waitUntilTableExists(builder -> builder.tableName("gtfsData"));
@@ -238,11 +240,12 @@ public class GtfsStaticRepository {
                 });
     }
 
-    public Flux<GtfsStaticData> findAllStopTimes(String feedId, Collection<String> trips) {
-        return Flux.fromIterable(trips).flatMap(trip -> {
-            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + STOPTIME).sortValue(trip).build());
-            return Flux.from(table.index(AGENCY_TYPE_ID_INDEX).query(queryConditional).flatMapIterable(Page::items));
-        });
+    private static Key generateTripKey(String trip, String feedId) {
+        return Key
+                .builder()
+                .partitionValue(trip)
+                .sortValue(feedId + ":" + TRIP)
+                .build();
     }
 
     public Flux<GtfsStaticData> findAllStops(String feedId, List<String> stopIds) {
@@ -263,16 +266,35 @@ public class GtfsStaticRepository {
         });
     }
 
+    public Flux<GtfsStaticData> findAllStopTimes(String feedId, Collection<String> trips) {
+        return Flux.fromIterable(trips).flatMap(trip -> {
+            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + STOPTIME).sortValue(trip).build());
+            return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), queryConditional);
+        });
+    }
+
     public Flux<GtfsStaticData> findAllStops(String feedId) {
-        return Flux
-                .from(table
-                        .index(AGENCY_TYPE_INDEX)
-                        .query(QueryConditional
-                                .keyEqualTo(Key
-                                        .builder()
-                                        .partitionValue(feedId + ":" + STOP)
-                                        .build())))
-                .flatMapIterable(Page::items);
+        var qc = QueryConditional
+                .keyEqualTo(Key
+                        .builder()
+                        .partitionValue(feedId + ":" + STOP)
+                        .build());
+        return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_INDEX), qc);
+    }
+
+    /**
+     * Gathers stops, stopTimes, and shapes for tripIds concurrently.
+     * This would have been a lot easier with a relational database, but here we are
+     *
+     * @param feedId
+     * @param tripIds
+     * @return
+     */
+    public Flux<GtfsStaticData> findStaticDataFor(String feedId, List<String> tripIds) {
+        if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
+            return Flux.empty();
+        }
+        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
     }
 
     /**
@@ -291,40 +313,19 @@ public class GtfsStaticRepository {
                 .mapNotNull(GtfsStaticData::getShapeId)
                 .distinct()
                 .flatMap(shapeId ->
-                        table.index(AGENCY_TYPE_ID_INDEX).query(QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))
-                ).flatMapIterable(Page::items);
-    }
-
-    /**
-     * Gathers stops, stopTimes, and shapes for tripIds concurrently.
-     * This would have been a lot easier with a relational database, but here we are
-     *
-     * @param feedId
-     * @param tripIds
-     * @return
-     */
-    public Flux<GtfsStaticData> findStaticDataFor(String feedId, List<String> tripIds) {
-        if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
-            return Flux.empty();
-        }
-        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
+                        cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))
+                );
     }
 
     public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {
-        return Flux.fromIterable(DynamoUtils.chunkList(tripIds, 100)).flatMap(chunkedList -> {
-            List<ReadBatch> readBatches = chunkedList
-                    .stream()
-                    .map(e -> ReadBatch.builder(GtfsStaticData.class)
-                            .addGetItem(Key
-                                    .builder()
-                                    .partitionValue(e)
-                                    .sortValue(feedId + ":" + TRIP)
-                                    .build())
-                            .mappedTableResource(table)
-                            .build())
-                    .toList();
-            BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
-            return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
-        });
+        List<Key> keys = tripIds.stream().distinct().map(t -> generateTripKey(t, feedId)).toList();
+        return cachedRepository
+                .getCachedQuery(
+                        table,
+                        keys,
+                        GtfsStaticData.class,
+                        d ->
+                                generateTripKey(d.getTripId(), feedId)
+                );
     }
 }

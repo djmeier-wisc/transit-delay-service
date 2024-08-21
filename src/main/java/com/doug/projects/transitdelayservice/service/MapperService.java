@@ -1,7 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.MapOptions;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
@@ -14,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.geojson.*;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -26,7 +24,6 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.doug.projects.transitdelayservice.config.CachingConfiguration.DELAY_LINES_CACHE;
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.*;
 import static java.util.Collections.emptyList;
 import static java.util.Comparator.comparing;
@@ -267,24 +264,27 @@ public class MapperService {
                 .map(this::getFeatureCollection);
     }
 
-    @Cacheable(value = DELAY_LINES_CACHE)
+    //    @Cacheable(value = DELAY_LINES_CACHE)
     public Mono<FeatureCollection> getDelayLines(String feedId, MapOptions mapOptions) {
         if (StringUtils.isBlank(mapOptions.getRouteName()) || StringUtils.isBlank(feedId)) {
             log.error("Failed either due to empty feedId or empty routeName");
             return Mono.just(new FeatureCollection());
         }
         //this looks weird, but it was the easiest way to zip together a single timeZone with many
-        Flux<String> agencyTimezone = agencyFeedRepository.getAgencyFeedById(feedId).map(AgencyFeed::getTimezone).cache().repeat();
+        Flux<String> agencyTimezone = agencyFeedRepository.getAgencyFeedById(feedId, true).map(f -> f.getTimezone() == null ? "" : f.getTimezone()).cache().repeat();
         return Flux.zip(routeTimestampRepository.getRouteTimestampsBy(getMidnightDaysAgo(mapOptions.getSearchPeriod()),
                         getMidnightTonight(),
                         List.of(mapOptions.getRouteName()),
                         feedId), agencyTimezone)
                 .filter(routeTimestamp -> {
                     var date = Instant.ofEpochSecond(routeTimestamp.getT1().getTimestamp());
+                    if (StringUtils.isEmpty(routeTimestamp.getT2())) {
+                        return true;
+                    }
                     var sampledHour = date.atZone(ZoneId.of(routeTimestamp.getT2())).getHour();
                     var sampledDay = date.atZone(ZoneId.of(routeTimestamp.getT2())).getDayOfWeek();
-                    return sampledHour > mapOptions.getHourStarted() &&
-                            sampledHour < mapOptions.getHourEnded() &&
+                    return sampledHour >= mapOptions.getHourStarted() &&
+                            sampledHour <= mapOptions.getHourEnded() &&
                             mapOptions.getDaysSelected().contains(sampledDay.getValue());
                 })
                 .map(Tuple2::getT1)
@@ -310,7 +310,7 @@ public class MapperService {
             toDelay.forEach((to, delayAndShape) -> {
                 Feature feature = new Feature();
                 LineString lineString = new LineString();
-                List<GtfsStaticData> shapeData = shapesByShapeId.get(delayAndShape.getShapeId());
+                List<GtfsStaticData> shapeData = shapesByShapeId.getOrDefault(delayAndShape.getShapeId(), emptyList());
                 lineString.setCoordinates(divideShape(shapeData, from, to));
                 feature.setGeometry(lineString);
                 feature.setProperty("averageDelay", delayAndShape.getDelay() / 60.);

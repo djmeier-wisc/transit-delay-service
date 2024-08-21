@@ -14,18 +14,19 @@ import java.util.concurrent.TimeUnit;
 @Configuration
 public class CachingConfiguration {
     public static final String DELAY_LINES_CACHE = "delayLines";
+    public static final String DYNAMO_REPOSITORY_CACHE = "dynamoRepository";
 
     @Bean
     public CacheManager cacheManager(Caffeine<Object, Object> caffeine) {
         CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
         caffeineCacheManager.setCaffeine(caffeine);
-        caffeineCacheManager.setCacheNames(List.of(DELAY_LINES_CACHE));
+        caffeineCacheManager.setCacheNames(List.of(DELAY_LINES_CACHE, DYNAMO_REPOSITORY_CACHE));
         caffeineCacheManager.setAsyncCacheMode(true);
         return caffeineCacheManager;
     }
 
     @Bean
     public Caffeine<Object, Object> caffeineConfig() {
-        return Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.MINUTES);
+        return Caffeine.newBuilder().expireAfterWrite(5, TimeUnit.MINUTES);
     }
 }

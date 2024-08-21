@@ -20,7 +20,7 @@ public class ExpectedBusTimesService {
         if (tripsWithoutDelayAttribute.isEmpty()) {
             return Mono.empty();
         }
-        return Mono.zip(staticRepository.getTripMapFor(feedId, tripsWithoutDelayAttribute).collectList(), agencyRepository.getAgencyFeedById(feedId))
+        return Mono.zip(staticRepository.getTripMapFor(feedId, tripsWithoutDelayAttribute).collectList(), agencyRepository.getAgencyFeedById(feedId, false))
                 .map(tuple -> {
                     var staticData = tuple.getT1();
                     var agencyData = tuple.getT2();

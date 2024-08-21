@@ -12,7 +12,7 @@ spring:
     cache-names: delayLines
     caffeine:
       spec:
-        maximumSize: 500
+        maximumSize: 50000
         expireAfterAccess: 1d
 server:
   port: 8080

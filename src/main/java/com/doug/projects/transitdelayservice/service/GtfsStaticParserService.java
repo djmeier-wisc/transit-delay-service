@@ -203,7 +203,7 @@ public class GtfsStaticParserService {
                     log.error("UNABLE TO FIND TZ FOR ID: {}", agencyId);
                     return;
                 }
-                agencyFeedRepository.getAgencyFeedById(agencyId)
+                agencyFeedRepository.getAgencyFeedById(agencyId, false)
                         .subscribe(f -> {
                             f.setTimezone(timezone);
                             agencyFeedRepository.writeAgencyFeed(f);
