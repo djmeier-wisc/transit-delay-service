@@ -3,10 +3,9 @@ package com.doug.projects.transitdelayservice.entity.dynamodb;
 import lombok.*;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.*;
+
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @Data
 @DynamoDbBean
@@ -15,14 +14,15 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortK
 @AllArgsConstructor
 public class GtfsStaticData {
     public static final String AGENCY_TYPE_INDEX = "agencyType-index";
+    public static final String AGENCY_TYPE_ID_INDEX = "agencyType-id-index";
     //{agency_id}:{type}
     @Getter(onMethod = @__({@DynamoDbSortKey,
-            @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX})}))
+            @DynamoDbSecondaryPartitionKey(indexNames = {AGENCY_TYPE_INDEX, AGENCY_TYPE_ID_INDEX})}))
     private String agencyType;
     //route_id, trip_id, trip_id:stop_sequence (for stopTime), stop_id
     //although unintuitive, this is the PK to prevent hot partitions
     //read indexes will be needed to query this data
-    @Getter(onMethod = @__({@DynamoDbPartitionKey}))
+    @Getter(onMethod = @__({@DynamoDbPartitionKey, @DynamoDbSecondarySortKey(indexNames = AGENCY_TYPE_ID_INDEX)}))
     private String id;
     //used for trips and routes
     private String routeName;
@@ -34,6 +34,7 @@ public class GtfsStaticData {
     private String stopId;
     private Double stopLat;
     private Double stopLon;
+    private String shapeId;
 
     public void setAgencyType(String agencyId, TYPE type) {
         this.agencyType = agencyId + ":" + type.getName();
@@ -66,11 +67,18 @@ public class GtfsStaticData {
         };
     }
 
-    public String getStopSequence() {
-        if (getType() != TYPE.STOPTIME) {
+    public String getShapeIdFromId() {
+        if (!getType().equals(TYPE.SHAPE)) {
             return null;
         }
-        return StringUtils.substringAfter(id, ":");
+        return StringUtils.substringBefore(id, ":");
+    }
+
+    public Integer getSequence() {
+        if (getType() != TYPE.STOPTIME && getType() != TYPE.SHAPE) {
+            return null;
+        }
+        return toInt(StringUtils.substringAfter(id, ":"));
     }
 
     /**
@@ -81,8 +89,12 @@ public class GtfsStaticData {
      */
     @Getter
     public enum TYPE {
-        AGENCY("AGENCY", "agency.csv"), ROUTE("ROUTE", "routes.csv"), TRIP("TRIP", "trips.csv"), STOP("STOP", "stops.csv"), STOPTIME("STOPTIME",
-                "stop_times.csv");
+        AGENCY("AGENCY", "agency.csv"),
+        ROUTE("ROUTE", "routes.csv"),
+        TRIP("TRIP", "trips.csv"),
+        STOP("STOP", "stops.csv"),
+        STOPTIME("STOPTIME", "stop_times.csv"),
+        SHAPE("SHAPE", "shapes.csv");
         private final String name;
         private final String fileName;
 

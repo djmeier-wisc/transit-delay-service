@@ -10,8 +10,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
-import static org.apache.commons.lang3.math.NumberUtils.toInt;
-
 @Service
 @RequiredArgsConstructor
 public class ExpectedBusTimesService {
@@ -22,14 +20,14 @@ public class ExpectedBusTimesService {
         if (tripsWithoutDelayAttribute.isEmpty()) {
             return Mono.empty();
         }
-        return Mono.zip(staticRepository.getTripMapFor(feedId, tripsWithoutDelayAttribute).collectList(), agencyRepository.getAgencyFeedById(feedId))
+        return Mono.zip(staticRepository.getTripMapFor(feedId, tripsWithoutDelayAttribute).collectList(), agencyRepository.getAgencyFeedById(feedId, false))
                 .map(tuple -> {
                     var staticData = tuple.getT1();
                     var agencyData = tuple.getT2();
                     ExpectedBusTimes map = new ExpectedBusTimes();
                     for (GtfsStaticData data : staticData) {
-                        map.putDeparture(data.getTripId(), toInt(data.getStopSequence()), data.getDepartureTime());
-                        map.putArrival(data.getTripId(), toInt(data.getStopSequence()), data.getArrivalTime());
+                        map.putDeparture(data.getTripId(), data.getSequence(), data.getDepartureTime());
+                        map.putArrival(data.getTripId(), data.getSequence(), data.getArrivalTime());
                     }
                     map.setTimezone(agencyData.getTimezone());
                     return map;

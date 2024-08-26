@@ -90,7 +90,7 @@ public class GtfsFeedAggregator {
         //all redirect ids, mapped to their old OMS
         Map<String, OpenMobilitySource> redirectMap = allSources.stream()
                 .filter(o -> StringUtils.isNotBlank(o.getRedirectId()))
-                .collect(Collectors.toMap(OpenMobilitySource::getRedirectId, Function.identity()));
+                .collect(Collectors.toMap(OpenMobilitySource::getRedirectId, Function.identity(), (a, b) -> a));
         Map<String, String> oldIdToNewIdMap = allSources.stream()
                 .filter(o -> StringUtils.isNotBlank(o.getRedirectId()))
                 .collect(Collectors.toMap(OpenMobilitySource::getMdbSourceId, OpenMobilitySource::getRedirectId));

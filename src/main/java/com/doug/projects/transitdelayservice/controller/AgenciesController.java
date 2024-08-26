@@ -34,6 +34,6 @@ public class AgenciesController {
     @GetMapping("/v1/agencies/{feedId}")
     @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
     public Mono<AgencyFeed> getActiveAgencies(@PathVariable String feedId) {
-        return agencyFeedRepository.getAgencyFeedById(feedId);
+        return agencyFeedRepository.getAgencyFeedById(feedId, false);
     }
 }

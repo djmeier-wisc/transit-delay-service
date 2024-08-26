@@ -7,7 +7,6 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
@@ -27,10 +26,12 @@ import static java.util.Collections.emptyList;
 public class AgencyRouteTimestampRepository {
     private final DynamoDbEnhancedAsyncClient asyncEnhancedClient;
     private final DynamoDbAsyncTable<AgencyRouteTimestamp> table;
+    private final CachedRepository cachedRepository;
 
-    public AgencyRouteTimestampRepository(DynamoDbEnhancedAsyncClient asyncEnhancedClient) {
+    public AgencyRouteTimestampRepository(DynamoDbEnhancedAsyncClient asyncEnhancedClient, CachedRepository cachedRepository) {
         this.asyncEnhancedClient = asyncEnhancedClient;
         this.table = asyncEnhancedClient.table("routeTimestamp", TableSchema.fromBean(AgencyRouteTimestamp.class));
+        this.cachedRepository = cachedRepository;
     }
 
     public void save(AgencyRouteTimestamp agencyRouteTimestamp) {
@@ -107,7 +108,12 @@ public class AgencyRouteTimestampRepository {
     }
 
     public Mono<Map<String, List<AgencyRouteTimestamp>>> getRouteTimestampsMapBy(long startTime, long endTime, List<String> routeNames, String feedId) {
-        List<SdkPublisher<AgencyRouteTimestamp>> routeStream = routeNames.stream().map(routeName -> {
+        return getRouteTimestampsBy(startTime, endTime, routeNames, feedId)
+                .collect(groupByRouteNameAndSortByTimestamp());
+    }
+
+    public Flux<AgencyRouteTimestamp> getRouteTimestampsBy(long startTime, long endTime, List<String> routeNames, String feedId) {
+        return Flux.fromIterable(routeNames).flatMap(routeName -> {
             Key lowerBound = Key.builder()
                     .partitionValue(createKey(feedId, routeName))
                     .sortValue(startTime)
@@ -117,10 +123,21 @@ public class AgencyRouteTimestampRepository {
                     .sortValue(endTime)
                     .build();
             QueryConditional query = QueryConditional.sortBetween(lowerBound, upperBound);
-            QueryEnhancedRequest request = QueryEnhancedRequest.builder().queryConditional(query).build();
-            return table.query(request).items();
-        }).toList();
-        return Flux.merge(routeStream)
-                .collect(groupByRouteNameAndSortByTimestamp());
+            return cachedRepository.getCachedQuery(table, query);
+        });
+    }
+
+    public Flux<AgencyRouteTimestamp> getRouteTimestampsBy(long startTime, long endTime, String routeName, String feedId) {
+        Key lowerBound = Key.builder()
+                .partitionValue(createKey(feedId, routeName))
+                .sortValue(startTime)
+                .build();
+        Key upperBound = Key.builder()
+                .partitionValue(createKey(feedId, routeName))
+                .sortValue(endTime)
+                .build();
+        QueryConditional query = QueryConditional.sortBetween(lowerBound, upperBound);
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder().queryConditional(query).build();
+        return Flux.merge(table.query(request).items());
     }
 }

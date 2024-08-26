@@ -26,11 +26,13 @@ import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.I
 public class AgencyFeedRepository {
     private final DynamoDbEnhancedAsyncClient enhancedClient;
     private final DynamoDbAsyncTable<AgencyFeed> table;
+    private final CachedRepository cachedRepository;
 
 
-    public AgencyFeedRepository(DynamoDbEnhancedAsyncClient enhancedClient) {
+    public AgencyFeedRepository(DynamoDbEnhancedAsyncClient enhancedClient, CachedRepository cachedRepository) {
         this.enhancedClient = enhancedClient;
         table = enhancedClient.table("agencyFeeds", TableSchema.fromBean(AgencyFeed.class));
+        this.cachedRepository = cachedRepository;
     }
 
 
@@ -103,8 +105,11 @@ public class AgencyFeedRepository {
                 .join();
     }
 
-    public Mono<AgencyFeed> getAgencyFeedById(String feedId) {
+    public Mono<AgencyFeed> getAgencyFeedById(String feedId, boolean useCache) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(feedId).build());
+        if (useCache) {
+            return cachedRepository.getCachedQuery(table.index(ID_INDEX), queryConditional).next();
+        }
         return Flux.concat(table.index(ID_INDEX).query(queryConditional))
                 .flatMapIterable(Page::items)
                 .next();

@@ -16,12 +16,24 @@ public class TransitDateUtil {
                 .toEpochSecond(ZoneOffset.of("-5"));
     }
 
+    public static long getMidnightOneMonthAgo() {
+        LocalDateTime ldt = LocalDateTime.now();
+        LocalTime midnight = LocalTime.MIDNIGHT;
+        return LocalDateTime.of(ldt.minusMonths(1).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
+    }
+
     public static long getMidnightTonight() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
         return LocalDateTime.of(ldt.plusDays(1)
                         .toLocalDate(), midnight)
                 .toEpochSecond(ZoneOffset.of("-5"));
+    }
+
+    public static long getMidnightDaysAgo(int daysAgo) {
+        LocalDateTime ldt = LocalDateTime.now();
+        LocalTime midnight = LocalTime.MIDNIGHT;
+        return LocalDateTime.of(ldt.minusDays(daysAgo).toLocalDate(), midnight).toEpochSecond(ZoneOffset.of("-5"));
     }
 
     public static AbstractMap.SimpleEntry<Long, Long>[] getStartAndEndTimesList(long startTime, long endTime,

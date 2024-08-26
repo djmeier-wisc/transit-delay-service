@@ -8,6 +8,12 @@ openMobilityData:
 spring:
   codec:
     max-in-memory-size: 1000KB
+  cache:
+    cache-names: delayLines
+    caffeine:
+      spec:
+        maximumSize: 50000
+        expireAfterAccess: 1d
 server:
   port: 8080
 doesAgencyCronRun: true

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
@@ -17,26 +18,30 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_ID_INDEX;
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
+import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseFirstPartInt;
+import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseLastPartInt;
 import static java.util.Comparator.*;
-import static org.apache.commons.lang3.StringUtils.isNumeric;
-import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @Repository
 @Slf4j
 public class GtfsStaticRepository {
     private final DynamoDbEnhancedAsyncClient enhancedAsyncClient;
     private final DynamoDbAsyncTable<GtfsStaticData> table;
+    private final CachedRepository cachedRepository;
 
 
-    public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient) {
+    public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient, CachedRepository cachedRepository) {
         this.enhancedAsyncClient = enhancedAsyncClient;
         this.table = enhancedAsyncClient.table("gtfsData", TableSchema.fromBean(GtfsStaticData.class));
+        this.cachedRepository = cachedRepository;
         try (var waiter = DynamoDbWaiter.create()) {
             table.createTable();
             waiter.waitUntilTableExists(builder -> builder.tableName("gtfsData"));
@@ -58,6 +63,25 @@ public class GtfsStaticRepository {
         DynamoUtils
                 .chunkList(data, 500) //limit 500 per batch write.
                 .forEach(this::parallelSaveAll);
+    }
+
+    public void saveAll(Flux<GtfsStaticData> data) {
+        data.bufferTimeout(25, Duration.ofMillis(500))
+                .flatMap(chunkedList ->
+                        Mono.fromFuture(enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
+                        ))
+                .flatMap(result -> {
+                    var unprocessedItems = result.unprocessedPutItemsForTable(table);
+                    if (!unprocessedItems.isEmpty()) {
+                        return Mono.error(new RuntimeException("Failed to write! Following through with retry"));
+                    }
+                    return Mono.empty();
+                })
+                .retryWhen(Retry.backoff(10, Duration.ofMillis(500))
+                        .jitter(1d)
+                        .doBeforeRetry(r -> log.info("Number of retries for staticData: {}", r.totalRetries()))
+                        .onRetryExhaustedThrow((r, t) -> new RuntimeException("Exhausted retries for staticData")))
+                .subscribe();
     }
 
     /**
@@ -130,8 +154,9 @@ public class GtfsStaticRepository {
         return this.findAllRoutes(agencyId)
                 .map(gtfsStaticData -> gtfsStaticData.stream()
                         .sorted(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(naturalOrder()))
-                                .thenComparing(g -> isNumeric(g.getRouteName()))
-                                .thenComparingInt(g -> toInt(g.getRouteName())))
+                                .thenComparing((GtfsStaticData d) -> parseFirstPartInt(d.getRouteName()), nullsLast(naturalOrder()))
+                                .thenComparing((GtfsStaticData d) -> parseLastPartInt(d.getRouteName()), nullsLast(naturalOrder()))
+                                .thenComparing(GtfsStaticData::getRouteName, nullsLast(naturalOrder())))
                         .map(GtfsStaticData::getRouteName)
                         .distinct()
                         .toList());
@@ -218,5 +243,94 @@ public class GtfsStaticRepository {
                     BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
                     return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
                 });
+    }
+
+    private static Key generateTripKey(String trip, String feedId) {
+        return Key
+                .builder()
+                .partitionValue(trip)
+                .sortValue(feedId + ":" + TRIP)
+                .build();
+    }
+
+    public Flux<GtfsStaticData> findAllStops(String feedId, List<String> stopIds) {
+        return Flux.fromIterable(DynamoUtils.chunkList(stopIds, 100)).flatMap(chunkedList -> {
+            List<ReadBatch> readBatches = chunkedList
+                    .stream()
+                    .map(e -> ReadBatch.builder(GtfsStaticData.class)
+                            .addGetItem(Key
+                                    .builder()
+                                    .partitionValue(e)
+                                    .sortValue(feedId + ":" + STOP)
+                                    .build())
+                            .mappedTableResource(table)
+                            .build())
+                    .toList();
+            BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
+            return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
+        });
+    }
+
+    public Flux<GtfsStaticData> findAllStopTimes(String feedId, Collection<String> trips) {
+        return Flux.fromIterable(trips).flatMap(trip -> {
+            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + STOPTIME).sortValue(trip).build());
+            return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), queryConditional);
+        });
+    }
+
+    public Flux<GtfsStaticData> findAllStops(String feedId) {
+        var qc = QueryConditional
+                .keyEqualTo(Key
+                        .builder()
+                        .partitionValue(feedId + ":" + STOP)
+                        .build());
+        return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_INDEX), qc);
+    }
+
+    /**
+     * Gathers stops, stopTimes, and shapes for tripIds concurrently.
+     * This would have been a lot easier with a relational database, but here we are
+     *
+     * @param feedId
+     * @param tripIds
+     * @return
+     */
+    public Flux<GtfsStaticData> findStaticDataFor(String feedId, List<String> tripIds) {
+        if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
+            return Flux.empty();
+        }
+        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
+    }
+
+    /**
+     * Gets the trips associated with feedId and tripIds, gathers the shapeId from the results, and queries again for shape data
+     * <br/>
+     * This isn't ideal for performance, but it saves on costs associated with storing a shape for each trip.
+     * <br/>
+     * Every day I regret choosing a non-relational database for <strong>obviously</strong> relational GTFS data
+     *
+     * @param feedId
+     * @param tripIds
+     * @return
+     */
+    public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
+        return findAllTrips(feedId, tripIds)
+                .mapNotNull(GtfsStaticData::getShapeId)
+                .distinct()
+                .flatMap(shapeId ->
+                        cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))
+                );
+    }
+
+    public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {
+        List<Key> keys = tripIds.stream().distinct().map(t -> generateTripKey(t, feedId)).toList();
+        return cachedRepository
+                .getCachedQuery(
+                        table,
+                        keys,
+                        GtfsStaticData.class,
+                        d ->
+                                generateTripKey(d.getTripId(), feedId)
+                );
     }
 }
