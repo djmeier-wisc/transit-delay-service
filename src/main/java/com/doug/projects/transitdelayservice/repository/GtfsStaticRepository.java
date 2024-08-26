@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
@@ -17,6 +18,7 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -64,18 +66,21 @@ public class GtfsStaticRepository {
     }
 
     public void saveAll(Flux<GtfsStaticData> data) {
-        data.buffer(25)
+        data.bufferTimeout(25, Duration.ofMillis(500))
                 .flatMap(chunkedList ->
                         Mono.fromFuture(enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
                         ))
-                .flatMapIterable(result ->
-                        result.unprocessedPutItemsForTable(table)
-                ).buffer(25)
-                .flatMap(chunkedFailures ->
-                        Mono.fromFuture(enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedFailures, b)))
-                ).flatMapIterable(result ->
-                        result.unprocessedPutItemsForTable(table)
-                ).log()
+                .flatMap(result -> {
+                    var unprocessedItems = result.unprocessedPutItemsForTable(table);
+                    if (!unprocessedItems.isEmpty()) {
+                        return Mono.error(new RuntimeException("Failed to write! Following through with retry"));
+                    }
+                    return Mono.empty();
+                })
+                .retryWhen(Retry.backoff(10, Duration.ofMillis(500))
+                        .jitter(1d)
+                        .doBeforeRetry(r -> log.info("Number of retries for staticData: {}", r.totalRetries()))
+                        .onRetryExhaustedThrow((r, t) -> new RuntimeException("Exhausted retries for staticData")))
                 .subscribe();
     }
 

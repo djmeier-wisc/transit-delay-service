@@ -1,6 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.GraphOptions;
+import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
@@ -9,6 +10,7 @@ import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Mono;
@@ -18,6 +20,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
@@ -85,7 +88,7 @@ public class GetDelayService {
      * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
      *
      * @param graphOptions the options used to create a graph
-     * @param converter    the function run for after gathering all routeTimestamps.
+     * @param converter    Maps a list of routeTimestamp to a data point on a graph
      * @return a graph, beginning at startTime, ending at endTime, over the number of units
      */
     private Mono<LineGraphDataResponse> genericLineGraphConverter(String feedId, GraphOptions graphOptions, RouteTimestampConverter converter) {
@@ -99,45 +102,51 @@ public class GetDelayService {
         if (startTime >= endTime)
             return Mono.error(new IllegalArgumentException("StartTime must be less than endTime"));
 
-        return repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId).map(routeTimestampsMap -> {
-            return routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
-                List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
-                if (timestampsForRoute == null) {
-                    timestampsForRoute = Collections.emptyList();
-                }
-                List<Double> currData = new ArrayList<>(units * 2);
-                double perUnitSecondLength = (double) (endTime - startTime) / units;
-                int lastIndexUsed = 0;
-                for (int currUnit = 0; currUnit < units; currUnit++) {
-                    final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-                    int currLastIndex = timestampsForRoute.size();
-                    for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                        if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                            currLastIndex = i;
-                            break;
-                        }
-                    }
-                    Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                    if (converterResult != null) {
-                        BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
-                        currData.add(bigDecimal.doubleValue());
-                    } else {
-                        currData.add(null);
-                    }
-                    //get ready for next iteration
-                    lastIndexUsed = currLastIndex;
-                }
-                return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
-            }).collect(Collectors.toList());
-        }).map(lineGraphDataList -> {
-            lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
-            if (useGtfsColor) {
-                lineGraphUtil.populateColor(finalFeedId, lineGraphDataList);
+        return repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId)
+                .map(routeTimestampsMap -> getLineGraphData(converter, routeTimestampsMap, units, endTime, startTime))
+                .map(lineGraphDataList -> getLineGraphDataResponse(lineGraphDataList, finalFeedId, useGtfsColor, startTime, endTime, units));
+    }
+
+    private @NotNull LineGraphDataResponse getLineGraphDataResponse(List<LineGraphData> lineGraphDataList, String finalFeedId, boolean useGtfsColor, long startTime, long endTime, int units) {
+        lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
+        if (useGtfsColor) {
+            lineGraphUtil.populateColor(finalFeedId, lineGraphDataList);
+        }
+        LineGraphDataResponse response = new LineGraphDataResponse();
+        response.setDatasets(lineGraphDataList);
+        response.setLabels(getColumnLabels(startTime, endTime, units));
+        return response;
+    }
+
+    private @NotNull List<LineGraphData> getLineGraphData(RouteTimestampConverter converter, Map<String, List<AgencyRouteTimestamp>> routeTimestampsMap, int units, long endTime, long startTime) {
+        return routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
+            List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
+            if (timestampsForRoute == null) {
+                timestampsForRoute = Collections.emptyList();
             }
-            LineGraphDataResponse response = new LineGraphDataResponse();
-            response.setDatasets(lineGraphDataList);
-            response.setLabels(getColumnLabels(startTime, endTime, units));
-            return response;
-        });
+            List<Double> currData = new ArrayList<>(units * 2);
+            double perUnitSecondLength = (double) (endTime - startTime) / units;
+            int lastIndexUsed = 0;
+            for (int currUnit = 0; currUnit < units; currUnit++) {
+                final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
+                int currLastIndex = timestampsForRoute.size();
+                for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
+                    if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
+                        currLastIndex = i;
+                        break;
+                    }
+                }
+                Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
+                if (converterResult != null) {
+                    BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
+                    currData.add(bigDecimal.doubleValue());
+                } else {
+                    currData.add(null);
+                }
+                //get ready for next iteration
+                lastIndexUsed = currLastIndex;
+            }
+            return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
+        }).collect(Collectors.toList());
     }
 }

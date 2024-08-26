@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.zeroturnaround.zip.ZipUtil;
-import reactor.core.publisher.Flux;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -295,7 +294,7 @@ public class GtfsStaticParserService {
             if (isStopTimes && isMissingArrivalsOrDepartures(gtfsList)) {
                 interpolateDelay(gtfsList);
             }
-            gtfsStaticRepository.saveAll(Flux.fromIterable(gtfsList));
+            gtfsStaticRepository.saveAll(gtfsList);
         } catch (IOException | DateTimeParseException e) {
             log.error("Failed to read file: {}", file.getName(), e);
         }
