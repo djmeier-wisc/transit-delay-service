@@ -315,10 +315,11 @@ public class GtfsRealtimeParserService {
         log.info("Read {} realtime feed entries from id: {}, url: {}", routeTimestampList.size(), feedId, realtimeUrl);
         fileStream.close();
         if (containsNullDelay(routeTimestampList)) {
-            log.error("Feed {} had null delay!.", feedId);
+            log.error("Feed {} had null delay!", feedId);
             return AgencyRealtimeResponse.builder()
                     .feed(feed)
                     .feedStatus(AgencyFeed.Status.OUTDATED)
+                    .routeTimestamps(filterNullDelay(routeTimestampList))
                     .build();
         }
         return AgencyRealtimeResponse.builder()
@@ -333,5 +334,11 @@ public class GtfsRealtimeParserService {
                 .flatMap(rt -> rt.getBusStatesCopyList().stream())
                 .map(BusState::getDelay)
                 .anyMatch(Objects::isNull);
+    }
+
+    private List<AgencyRouteTimestamp> filterNullDelay(List<AgencyRouteTimestamp> routeTimestampList) {
+        return routeTimestampList.stream().filter(r ->
+                r.getBusStatesCopyList().stream().map(BusState::getDelay).noneMatch(Objects::isNull)
+        ).toList();
     }
 }

@@ -161,6 +161,7 @@ public class MapperService {
                 .collect(groupingBy(BusState::getTripId));
         Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> delayMapping = new HashMap<>();
         for (String tripId : stopTimesByTripId.keySet()) {
+            if (!tripsByTripId.containsKey(tripId)) continue;
             String shapeId = tripsByTripId.get(tripId).getShapeId();
             List<BusState> busStatesForTripId = busStatesByTripId.getOrDefault(tripId, emptyList());
             List<GtfsStaticData> stopTimesForTripId = stopTimesByTripId.getOrDefault(tripId, emptyList());
@@ -178,7 +179,7 @@ public class MapperService {
                         .getClosestStopId());
                 //this should be considered a new run, either on a new day or a repeat trip, since it has finished
                 // its route and restarted.
-                if (toStopSeq <= fromStopSeq)
+                if (toStopSeq == null || fromStopSeq == null || toStopSeq <= fromStopSeq)
                     continue;
                 LngLatAlt[] stopPositions = getStopPositions(fromStopSeq, toStopSeq, stopTimesForTripId, stopsByStopId);
                 double[] interpolatedDelays = interpolate(fromDelay, toDelay, toStopSeq - fromStopSeq);
