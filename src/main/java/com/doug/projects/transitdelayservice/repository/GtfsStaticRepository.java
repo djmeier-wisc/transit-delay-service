@@ -104,7 +104,15 @@ public class GtfsStaticRepository {
                     .map(CompletableFuture::join)
                     .flatMap(Collection::stream)
                     .toList());
-        } while (!unfinishedWrites.isEmpty() && ++numRetries < 3);
+            if (!unfinishedWrites.isEmpty()) {
+                numRetries++;
+                try {
+                    Thread.sleep((long) Math.pow(100, numRetries));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        } while (!unfinishedWrites.isEmpty());
     }
 
     /**

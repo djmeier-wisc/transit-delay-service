@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.zeroturnaround.zip.ZipUtil;
+import reactor.core.publisher.FluxSink;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -105,28 +106,6 @@ public class GtfsStaticParserService {
     }
 
     /**
-     * Writes gtfs static data as .csv files to disk under /files.
-     *
-     * @param feed           the feed to download gtfs static data from
-     * @param timeoutSeconds the number of seconds until timeout. In the event of failure,
-     * @return AgencyStaticStatus w/ success false if timeout or IO exception, success of true otherwise.
-     * @implNote this may need to be forcibly timed out. some providers never return data, leading to thread starvation
-     */
-    public CompletableFuture<AgencyStaticStatus> writeGtfsRoutesToDiskAsync(AgencyFeed feed, int timeoutSeconds) {
-        var timeOutErr = AgencyStaticStatus.builder().success(false).message("Timeout").feed(feed).build();
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                if (!writeGtfsRoutesToDiskSync(feed.getStaticUrl(), feed.getId())) {
-                    return AgencyStaticStatus.builder().message("Failed to write to disk").success(false).feed(feed).build();
-                }
-            } catch (IOException e) {
-                return AgencyStaticStatus.builder().message(e.getMessage()).success(false).feed(feed).build();
-            }
-            return AgencyStaticStatus.builder().message("Success-ish :)").success(true).feed(feed).build();
-        }).completeOnTimeout(timeOutErr, timeoutSeconds, TimeUnit.SECONDS);
-    }
-
-    /**
      * Gets the associated type with this filename by checking whether the filename ENDS with type.getFileName.
      */
     public static GtfsStaticData.TYPE getTypeEndsWith(String fileName) {
@@ -186,6 +165,20 @@ public class GtfsStaticParserService {
                 }
             }
         }
+    }
+
+    private static void waitForRequest(FluxSink<List<Integer>> fluxSink) {
+        while (fluxSink.requestedFromDownstream() == 0) {
+            try {
+                Thread.sleep(100); // Sleep for 100ms until more requests arrive
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static boolean isMissingArrivalsOrDepartures(GtfsStaticData gtfsStaticData) {
+        return gtfsStaticData.getDepartureTime() == null || gtfsStaticData.getArrivalTime() == null;
     }
 
     private void readAgencyTimezoneAndSaveToDb(String agencyId, File file) {
@@ -252,6 +245,28 @@ public class GtfsStaticParserService {
     }
 
     /**
+     * Writes gtfs static data as .csv files to disk under /files.
+     *
+     * @param feed           the feed to download gtfs static data from
+     * @param timeoutSeconds the number of seconds until timeout. In the event of failure,
+     * @return AgencyStaticStatus w/ success false if timeout or IO exception, success of true otherwise.
+     * @implNote this may need to be forcibly timed out. some providers never return data, leading to thread starvation
+     */
+    public CompletableFuture<AgencyStaticStatus> writeGtfsRoutesToDiskAsync(AgencyFeed feed, int timeoutSeconds) {
+        var timeOutErr = AgencyStaticStatus.builder().success(false).message("Timeout").feed(feed).build();
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                if (!writeGtfsRoutesToDiskSync(feed.getStaticUrl(), feed.getId())) {
+                    return AgencyStaticStatus.builder().message("Failed to write to disk").success(false).feed(feed).build();
+                }
+            } catch (IOException e) {
+                return AgencyStaticStatus.builder().message(e.getMessage()).success(false).feed(feed).build();
+            }
+            return AgencyStaticStatus.builder().message("Success-ish :)").success(true).feed(feed).build();
+        }).completeOnTimeout(timeOutErr, timeoutSeconds, TimeUnit.SECONDS);
+    }
+
+    /**
      * Generic converter to read data from a single file (routes.txt, trips.txt, etc.) from file and write to dynamo.
      *
      * @param <T>      an Attributes class used to map against .csv file passed in. Should be
@@ -272,31 +287,53 @@ public class GtfsStaticParserService {
                 .readValues(file)) {
             List<GtfsStaticData> gtfsList = new ArrayList<>();
             boolean isStopTimes = false;
+            boolean hasWrittenYet = false;
             while (attributesIterator.hasNext()) {
                 T attributes = attributesIterator.next();
-                if (attributes instanceof RoutesAttributes)
-                    gtfsList.add(convert((RoutesAttributes) attributes, agencyId, routeIdToNameMap));
-                else if (attributes instanceof StopAttributes)
-                    gtfsList.add(convert((StopAttributes) attributes, agencyId, stopIdToNameMap));
-                else if (attributes instanceof TripAttributes)
-                    gtfsList.add(convert((TripAttributes) attributes, agencyId, routeIdToNameMap, tripIdToNameMap));
-                else if (attributes instanceof ShapeAttributes)
-                    gtfsList.add(convert((ShapeAttributes) attributes, agencyId));
-                else if (attributes instanceof StopTimeAttributes) {
-                    gtfsList.add(convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap));
+                if (attributes instanceof StopTimeAttributes) {
                     isStopTimes = true;
-                } else {
-                    //this shouldn't be possible if you code it right... famous last words
-                    log.error("UNRECOGNIZED TYPE OF ATTRIBUTE, FAST FAIL.");
+                }
+                var staticData = getGtfsData(agencyId, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap, attributes, gtfsList, attributesIterator);
+                if (staticData == null) {
                     attributesIterator.close();
+                    break;
+                }
+                gtfsList.add(staticData);
+                if (gtfsList.size() >= 500 && !isMissingArrivalsOrDepartures(staticData)) {
+                    //remove the value written by the old segment.
+                    //we need this 'hasWrittenYet' to avoid rewriting the very first value
+                    if (hasWrittenYet) {
+                        gtfsList.remove(0);
+                    }
+                    interpolateAndWriteList(isStopTimes, gtfsList);
+                    hasWrittenYet = true;
+                    //to interpolate, we need the very last value added, which we verified is not missing arrivals/departures
+                    var tempOldValue = gtfsList.get(gtfsList.size() - 1);
+                    gtfsList.clear();
+                    gtfsList.add(tempOldValue);
                 }
             }
-            if (isStopTimes && isMissingArrivalsOrDepartures(gtfsList)) {
-                interpolateDelay(gtfsList);
-            }
-            gtfsStaticRepository.saveAll(gtfsList);
+            interpolateAndWriteList(isStopTimes, gtfsList);
         } catch (IOException | DateTimeParseException e) {
             log.error("Failed to read file: {}", file.getName(), e);
+        }
+    }
+
+    private <T> GtfsStaticData getGtfsData(String agencyId, Map<String, String> routeIdToNameMap, Map<String, String> tripIdToNameMap, Map<String, String> stopIdToNameMap, T attributes, List<GtfsStaticData> gtfsList, MappingIterator<T> attributesIterator) throws IOException {
+        if (attributes instanceof RoutesAttributes)
+            return convert((RoutesAttributes) attributes, agencyId, routeIdToNameMap);
+        else if (attributes instanceof StopAttributes)
+            return convert((StopAttributes) attributes, agencyId, stopIdToNameMap);
+        else if (attributes instanceof TripAttributes)
+            return convert((TripAttributes) attributes, agencyId, routeIdToNameMap, tripIdToNameMap);
+        else if (attributes instanceof ShapeAttributes)
+            return convert((ShapeAttributes) attributes, agencyId);
+        else if (attributes instanceof StopTimeAttributes) {
+            return convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap);
+        } else {
+            //this shouldn't be possible if you code it right... famous last words
+            log.error("UNRECOGNIZED TYPE OF ATTRIBUTE, FAST FAIL.");
+            return null;
         }
     }
 
@@ -309,13 +346,16 @@ public class GtfsStaticParserService {
         return gtfsStaticData;
     }
 
-    private boolean isMissingArrivalsOrDepartures(List<GtfsStaticData> gtfsList) {
-        for (GtfsStaticData gtfsStaticData : gtfsList) {
-            if (gtfsStaticData.getDepartureTime() == null || gtfsStaticData.getArrivalTime() == null) {
-                return true;
-            }
+    private void interpolateAndWriteList(boolean isStopTimes, List<GtfsStaticData> gtfsList) {
+        if (isStopTimes && isMissingArrivalsOrDepartures(gtfsList)) {
+            interpolateDelay(gtfsList);
         }
-        return false;
+        gtfsStaticRepository.saveAll(gtfsList);
+    }
+
+    private boolean isMissingArrivalsOrDepartures(List<GtfsStaticData> gtfsList) {
+        return gtfsList.stream()
+                .anyMatch(GtfsStaticParserService::isMissingArrivalsOrDepartures);
     }
 
     /**
