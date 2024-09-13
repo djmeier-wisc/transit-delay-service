@@ -25,7 +25,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
@@ -205,30 +204,34 @@ public class GtfsRealtimeParserService {
         return UNKNOWN_ROUTE;
     }
 
+    private static AgencyRealtimeResponse buildTimeoutFailureResponse(AgencyFeed feed) {
+        return AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.TIMEOUT).feed(feed).build();
+    }
+
     public CompletableFuture<AgencyRealtimeResponse> convertFromAsync(AgencyFeed feed, int timeoutSeconds) {
-        var timeoutFailure = AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.TIMEOUT).feed(feed).build();
         return CompletableFuture
-                .supplyAsync(() -> convertFromSync(feed), realtimeExecutor)
-                .completeOnTimeout(timeoutFailure, timeoutSeconds, TimeUnit.SECONDS);
+                .supplyAsync(() -> convertFromSync(feed, timeoutSeconds), realtimeExecutor);
     }
 
     /**
      * Parses the realTime feed from AgencyFeed.
      *
-     * @param feed the feed to try to read from the realtime url
+     * @param feed           the feed to try to read from the realtime url
+     * @param timeoutSeconds the seconds to timeout the read inputStream read
      * @return an AgencyRealTimeResponse.
      * <p>In the event of failure, status will be set and routeTimestamps field may be null or empty</p>
      */
-    private AgencyRealtimeResponse convertFromSync(AgencyFeed feed) {
+    private AgencyRealtimeResponse convertFromSync(AgencyFeed feed, int timeoutSeconds) {
         String feedId = feed.getId();
         String realtimeUrl = feed.getRealTimeUrl();
 
         try {
             log.info("Reading realtime feed from id: {}, url: {}", feedId, realtimeUrl);
             var conn = ((HttpURLConnection) new URL(realtimeUrl).openConnection());
+            conn.setConnectTimeout(20000);
             if (isRedirect(conn)) {
                 feed.setRealTimeUrl(handleRedirect(conn));
-                return convertFromSync(feed);
+                return convertFromSync(feed, timeoutSeconds);
             } else if (StringUtils.contains("401", conn.getResponseMessage()) ||
                     conn.getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED ||
                     conn.getResponseCode() == HttpURLConnection.HTTP_FORBIDDEN) {
@@ -244,13 +247,10 @@ public class GtfsRealtimeParserService {
                         .feedStatus(AgencyFeed.Status.UNAVAILABLE)
                         .build();
             }
-            return doRPCRequest(feed, feedId, realtimeUrl);
+            return doRPCRequest(feed, feedId, realtimeUrl, timeoutSeconds);
         } catch (IOException e) {
             log.error("Error reading realtime feed from id: {}, url: {}, message: {}", feedId, realtimeUrl, e.getMessage());
-            return AgencyRealtimeResponse.builder()
-                    .feed(feed)
-                    .feedStatus(AgencyFeed.Status.TIMEOUT)
-                    .build();
+            return buildTimeoutFailureResponse(feed);
         }
     }
 
@@ -283,8 +283,12 @@ public class GtfsRealtimeParserService {
                 .toList();
     }
 
-    private AgencyRealtimeResponse doRPCRequest(AgencyFeed feed, String feedId, String realtimeUrl) throws IOException {
-        var fileStream = java.net.URI.create(realtimeUrl).toURL().openStream();
+    private AgencyRealtimeResponse doRPCRequest(AgencyFeed feed, String feedId, String realtimeUrl, int timeoutSeconds) throws IOException {
+        var conn = ((HttpURLConnection) new URL(realtimeUrl).openConnection());
+        conn.setConnectTimeout(20000);
+        conn.setReadTimeout(timeoutSeconds * 1000);
+        var fileStream = conn.getInputStream();
+
         GtfsRealtime.FeedMessage feedMessage = GtfsRealtime.FeedMessage.parseFrom(fileStream);
         long timeStamp = feedMessage.getHeader().getTimestamp();
 

@@ -66,7 +66,7 @@ public class CronService {
     /**
      * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
      */
-    @Scheduled(fixedDelay = 5, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
     public void writeGtfsRealtimeData() {
         if (!doesRealtimeCronRun)
             return;
@@ -80,7 +80,9 @@ public class CronService {
                                         .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
                         .toArray(CompletableFuture[]::new);
 
-        CompletableFuture.allOf(allFutures).join();
+        CompletableFuture.allOf(allFutures)
+                .completeOnTimeout(null, 10, TimeUnit.MINUTES) //lets not miss more than two realtime writes of other feeds, if one is lagging
+                .join();
 
         log.info("Finished realtime data write");
     }
