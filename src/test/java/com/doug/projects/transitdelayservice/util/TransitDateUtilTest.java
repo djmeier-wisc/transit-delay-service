@@ -2,8 +2,7 @@ package com.doug.projects.transitdelayservice.util;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.*;
 import java.util.AbstractMap;
 
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.calculateTimeDifferenceInSeconds;
@@ -47,6 +46,35 @@ class TransitDateUtilTest {
             assertEquals(expectedEnd, result[unit].getValue(), "End time for unit " + unit + " is incorrect");
         }
     }
+
+    @Test
+    void calculateTimeDifferenceInSeconds_lateBus() {
+        //9-13-24 11:55PM
+        long dateOld = 1726289700;
+        //9-14-24 12:00AM
+        long dateNew = 1726290000;
+        String cstTimezone = "America/Chicago";
+        ZoneId cstZone = ZoneId.of("America/Chicago");
+        ZonedDateTime zonedDateOld = ZonedDateTime.of(LocalDateTime.ofInstant(Instant.ofEpochSecond(dateOld), cstZone), cstZone);
+
+        var difference = TransitDateUtil.calculateTimeDifferenceInSeconds(zonedDateOld.toLocalTime().toString(), dateNew, cstTimezone);
+        assertEquals(difference, 300);
+    }
+
+    @Test
+    void calculateTimeDifferenceInSeconds_earlyBus() {
+        //9-13-24 11:55PM
+        long dateOld = 1726289700;
+        //9-14-24 12:00AM
+        long dateNew = 1726290000;
+        String cstTimezone = "America/Chicago";
+        ZoneId cstZone = ZoneId.of("America/Chicago");
+        ZonedDateTime zonedDateNew = ZonedDateTime.of(LocalDateTime.ofInstant(Instant.ofEpochSecond(dateNew), cstZone), cstZone);
+
+        var differenceEarly = TransitDateUtil.calculateTimeDifferenceInSeconds(zonedDateNew.toLocalTime().toString(), dateOld, cstTimezone);
+        assertEquals(differenceEarly, -300);
+    }
+
 
     @Test
     void testCalculateTimeDifferenceInSeconds() {
