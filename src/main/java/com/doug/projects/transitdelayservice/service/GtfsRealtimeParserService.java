@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -125,24 +126,27 @@ public class GtfsRealtimeParserService {
         var timezone = tripMap.getTimezone();
         try {
             if (currStopTimeUpdate.hasDeparture() && departure.hasTime()) {
-                var actualDeparture = departure.getTime();
-                var expectedDeparture = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-                if (isEmpty(expectedDeparture) || isEmpty(timezone) || expectedDeparture.isEmpty()) {
-                    return null;
-                }
-                return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedDeparture.get(), actualDeparture, timezone);
+                return parseDateDifference(tu, tripMap, departure, currStopTimeUpdate, timezone);
             } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime()) {
-                var actualArrival = arrival.getTime();
-                var expectedArrival = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-                if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
-                    return null;
-                }
-                return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone);
+                return parseDateDifference(tu, tripMap, arrival, currStopTimeUpdate, timezone);
             }
         } catch (DateTimeParseException parseException) {
             log.error("Unable to parse date for tripUpdate: {}", tu);
         }
         return null;
+    }
+
+    private static @Nullable Integer parseDateDifference(GtfsRealtime.TripUpdate tu,
+                                                         ExpectedBusTimes tripMap,
+                                                         GtfsRealtime.TripUpdate.StopTimeEvent arrival,
+                                                         GtfsRealtime.TripUpdate.StopTimeUpdate currStopTimeUpdate,
+                                                         String timezone) {
+        var actualArrival = arrival.getTime();
+        var expectedArrival = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
+        if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
+            return null;
+        }
+        return (int) TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone);
     }
 
     private static Optional<GtfsRealtime.TripUpdate.StopTimeUpdate> getFirstScheduled(GtfsRealtime.TripUpdate tripUpdate) {

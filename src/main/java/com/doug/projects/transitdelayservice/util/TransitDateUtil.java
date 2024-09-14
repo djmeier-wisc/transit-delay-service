@@ -8,6 +8,7 @@ import java.util.AbstractMap;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 public class TransitDateUtil {
+    static long TWENTY_FOUR_HOURS_IN_SECONDS = 24 * 60 * 60;
     public static long getMidnightSixDaysAgo() {
         LocalDateTime ldt = LocalDateTime.now();
         LocalTime midnight = LocalTime.MIDNIGHT;
@@ -63,7 +64,15 @@ public class TransitDateUtil {
         LocalTime time = LocalTime.parse(expectedTime);
         LocalDate date = LocalDate.ofInstant(Instant.ofEpochSecond(actualTimestamp), timezone);
         ZonedDateTime zonedDateTime = ZonedDateTime.of(date, time, timezone);
-        return actualTimestamp - zonedDateTime.toEpochSecond();
+        //SCENARIO: in certain cases, we have an actualTime of 11:54, but the expectedTime is 12:01 AM, or vice versa
+        long diff = actualTimestamp - zonedDateTime.toEpochSecond();
+        if (Math.abs(diff) > (TWENTY_FOUR_HOURS_IN_SECONDS / 2)) {//if diff is > 12 hrs, it probably shouldn't be
+            if (diff > 0) {
+                return diff - TWENTY_FOUR_HOURS_IN_SECONDS;
+            }
+            return TWENTY_FOUR_HOURS_IN_SECONDS - Math.abs(diff);
+        }
+        return diff;
     }
 
     private static String addLeadingZero(String expectedTime) {
