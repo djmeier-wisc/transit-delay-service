@@ -3,6 +3,9 @@ package com.doug.projects.transitdelayservice;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
 import lombok.RequiredArgsConstructor;
+import net.javacrumbs.shedlock.core.LockProvider;
+import net.javacrumbs.shedlock.provider.dynamodb2.DynamoDBLockProvider;
+import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -12,6 +15,7 @@ import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -25,6 +29,7 @@ import java.util.concurrent.Executors;
         }
 )
 @RequiredArgsConstructor
+@EnableSchedulerLock(defaultLockAtMostFor = "10m")
 public class TransitDelayServiceApplication {
 
     public static void main(String[] args) {
@@ -65,5 +70,15 @@ public class TransitDelayServiceApplication {
     @Bean("dynamoWriting")
     public Executor dynamoExecutor() {
         return Executors.newFixedThreadPool(2);
+    }
+
+    @Bean
+    public DynamoDbClient dynamoDbClient() {
+        return DynamoDbClient.create();
+    }
+
+    @Bean
+    public LockProvider lockProvider(DynamoDbClient dynamoDB) {
+        return new DynamoDBLockProvider(dynamoDB, "shedLock");
     }
 }
