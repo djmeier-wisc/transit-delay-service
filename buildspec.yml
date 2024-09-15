@@ -4,20 +4,22 @@ phases:
   install:
     runtime-versions:
       java: corretto17
+    commands:
+      - echo Installing Docker
+      - yum update -y
+      - yum install -y docker
+      - service docker start
+      - $(aws ecr get-login --no-include-email --region us-east-1)
   build:
     commands:
       - echo Build started on `date`
       - mvn test
+      - mvn package
+      - echo Building Docker image
+      - docker build -t transit-delay-service .
+      - docker tag transit-delay-service:latest 963894786913.dkr.ecr.us-east-1.amazonaws.com/transit-delay-service
   post_build:
     commands:
       - echo Build completed on `date`
-      - mvn package
-artifacts:
-  files:
-    - target/*.jar
-    - scripts/*.sh
-    - files/*
-    - appspec.yml
-cache:
-  paths:
-    - '/root/.m2/**/*'
+      - echo Pushing Docker image to ECR
+      - docker push 963894786913.dkr.ecr.us-east-1.amazonaws.com/transit-delay-service:latest
