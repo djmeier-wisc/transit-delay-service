@@ -8,7 +8,7 @@ phases:
       - echo Installing Docker
       - yum update -y
       - yum install -y docker
-      - $(aws ecr get-login --no-include-email --region us-east-1)
+      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 963894786913.dkr.ecr.us-east-1.amazonaws.com/transit-delay-service
   build:
     commands:
       - echo Build started on `date`
