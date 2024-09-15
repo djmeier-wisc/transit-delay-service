@@ -8,7 +8,6 @@ phases:
       - echo Installing Docker
       - yum update -y
       - yum install -y docker
-      - service docker start
       - $(aws ecr get-login --no-include-email --region us-east-1)
   build:
     commands:
