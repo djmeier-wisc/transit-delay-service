@@ -1,13 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
-import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
-import org.junit.jupiter.api.BeforeEach;
+import com.doug.projects.transitdelayservice.entity.dynamodb.SequencedData;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
 import java.util.List;
 
@@ -15,31 +9,19 @@ import static java.util.Collections.emptyList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class GtfsStaticParserServiceTest {
-    @Mock
-    private GtfsStaticRepository gtfsStaticRepository;
-    @Mock
-    private AgencyFeedRepository agencyFeedRepository;
-    @InjectMocks
-    private GtfsStaticParserService staticParserService;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-    }
-
     @Test
     void interpolateDelayOneStop() {
-        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
-        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        SequencedData data1 = SequencedData.builder().departureTime("05:00:00").build();
+        List<SequencedData> gtfsList = new java.util.ArrayList<>();
         gtfsList.add(data1);
         GtfsStaticParserService.interpolateDelay(gtfsList);
         assertEquals("05:00:00", data1.getDepartureTime());
     }
     @Test
     void interpolateDelayTwoStops() {
-        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().departureTime("05:01:00").build();
-        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        SequencedData data1 = SequencedData.builder().departureTime("05:00:00").build();
+        SequencedData data2 = SequencedData.builder().departureTime("05:01:00").build();
+        List<SequencedData> gtfsList = new java.util.ArrayList<>();
         gtfsList.add(data1);
         gtfsList.add(data2);
         GtfsStaticParserService.interpolateDelay(gtfsList);
@@ -49,10 +31,10 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateDelayOneNullStop() {
-        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().build();
-        GtfsStaticData data3 = GtfsStaticData.builder().departureTime("05:02:00").build();
-        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        SequencedData data1 = SequencedData.builder().departureTime("05:00:00").build();
+        SequencedData data2 = SequencedData.builder().build();
+        SequencedData data3 = SequencedData.builder().departureTime("05:02:00").build();
+        List<SequencedData> gtfsList = new java.util.ArrayList<>();
         gtfsList.add(data1);
         gtfsList.add(data2);
         gtfsList.add(data3);
@@ -64,11 +46,11 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateDelayTwoBlanks() {
-        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().build();
-        GtfsStaticData data3 = GtfsStaticData.builder().build();
-        GtfsStaticData data4 = GtfsStaticData.builder().departureTime("05:01:30").build();
-        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        SequencedData data1 = SequencedData.builder().departureTime("05:00:00").build();
+        SequencedData data2 = SequencedData.builder().build();
+        SequencedData data3 = SequencedData.builder().build();
+        SequencedData data4 = SequencedData.builder().departureTime("05:01:30").build();
+        List<SequencedData> gtfsList = new java.util.ArrayList<>();
         gtfsList.add(data1);
         gtfsList.add(data2);
         gtfsList.add(data3);
@@ -82,12 +64,12 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateDelayNullStartOrEnd() {
-        GtfsStaticData data1 = GtfsStaticData.builder().arrivalTime("06:00:00").departureTime("05:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().build();
-        GtfsStaticData data3 = GtfsStaticData.builder().departureTime("05:01:00").build();
-        GtfsStaticData data4 = GtfsStaticData.builder().build();
-        GtfsStaticData data5 = GtfsStaticData.builder().arrivalTime("06:02:00").departureTime("05:02:00").build();
-        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        SequencedData data1 = SequencedData.builder().arrivalTime("06:00:00").departureTime("05:00:00").build();
+        SequencedData data2 = SequencedData.builder().build();
+        SequencedData data3 = SequencedData.builder().departureTime("05:01:00").build();
+        SequencedData data4 = SequencedData.builder().build();
+        SequencedData data5 = SequencedData.builder().arrivalTime("06:02:00").departureTime("05:02:00").build();
+        List<SequencedData> gtfsList = new java.util.ArrayList<>();
         gtfsList.add(data1);
         gtfsList.add(data2);
         gtfsList.add(data3);
@@ -108,10 +90,10 @@ class GtfsStaticParserServiceTest {
 
     @Test
     void interpolateOver24Hrs() {
-        GtfsStaticData data1 = GtfsStaticData.builder().departureTime("25:00:00").build();
-        GtfsStaticData data2 = GtfsStaticData.builder().build();
-        GtfsStaticData data3 = GtfsStaticData.builder().departureTime("26:00:00").build();
-        List<GtfsStaticData> gtfsList = new java.util.ArrayList<>();
+        SequencedData data1 = SequencedData.builder().departureTime("25:00:00").build();
+        SequencedData data2 = SequencedData.builder().build();
+        SequencedData data3 = SequencedData.builder().departureTime("26:00:00").build();
+        List<SequencedData> gtfsList = new java.util.ArrayList<>();
         gtfsList.add(data1);
         gtfsList.add(data2);
         gtfsList.add(data3);

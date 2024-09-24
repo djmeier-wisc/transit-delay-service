@@ -9,7 +9,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.retry.Retry;
 import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
@@ -23,9 +22,9 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_ID_INDEX;
 import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.AGENCY_TYPE_INDEX;
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOP;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.STOPTIME;
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseFirstPartInt;
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseLastPartInt;
 import static java.util.Comparator.*;
@@ -64,26 +63,6 @@ public class GtfsStaticRepository {
                 .chunkList(data, 500) //limit 500 per batch write.
                 .forEach(this::parallelSaveAll);
     }
-
-    public void saveAll(Flux<GtfsStaticData> data) {
-        data.bufferTimeout(25, Duration.ofMillis(500))
-                .flatMap(chunkedList ->
-                        Mono.fromFuture(enhancedAsyncClient.batchWriteItem(b -> addBatchWrites(chunkedList, b))
-                        ))
-                .flatMap(result -> {
-                    var unprocessedItems = result.unprocessedPutItemsForTable(table);
-                    if (!unprocessedItems.isEmpty()) {
-                        return Mono.error(new RuntimeException("Failed to write! Following through with retry"));
-                    }
-                    return Mono.empty();
-                })
-                .retryWhen(Retry.backoff(10, Duration.ofMillis(500))
-                        .jitter(1d)
-                        .doBeforeRetry(r -> log.info("Number of retries for staticData: {}", r.totalRetries()))
-                        .onRetryExhaustedThrow((r, t) -> new RuntimeException("Exhausted retries for staticData")))
-                .subscribe();
-    }
-
     /**
      * Writes all items in data to table synchronously. Chunked to Dynamo's 25 item maximum.
      *
@@ -186,16 +165,8 @@ public class GtfsStaticRepository {
         }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
     }
 
-    public Map<String, String> mapTripIdsToRouteName(String agencyId, List<String> tripIds) {
-        if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(tripIds)) return Collections.emptyMap();
-        List<String> uniqueTripIds = tripIds.stream().distinct().toList();
-        return DynamoUtils.chunkList(uniqueTripIds, 100).stream().flatMap(chunkList -> {
-            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.TRIP.getName())).build();
-            return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
-                    .flatMapIterable(p -> p.resultsForTable(table))
-                    .filter(GtfsStaticRepository::checkIdAndRouteName)
-                    .toStream();
-        }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
+    private static @NotNull Key getStopTimeKey(String feedId, String t) {
+        return Key.builder().partitionValue(t).sortValue(feedId + ":" + STOPTIME).build();
     }
 
     @NotNull
@@ -224,41 +195,16 @@ public class GtfsStaticRepository {
         return Mono.fromCompletionStage(table.getItem(key));
     }
 
-    /**
-     * Maps tripId and stopSequence to their respective departureTime and arrivalTime in the DB.
-     *
-     * @param feedId                     the feedId used to make database calls
-     * @param tripsWithoutDelayAttribute the list of tripIds and their associated stopSequence.
-     *                                   This is a map to prevent issues with making multiple calls for a single tripId,
-     *                                   which (should) be redundant...
-     *                                   we only store one tripId in the routeTimestamp db in the busstates list.
-     * @return a map from tripId to stopSequence to arrival/departure time
-     */
-    public Flux<GtfsStaticData> getTripMapFor(String feedId, Map<String, Integer> tripsWithoutDelayAttribute) {
-        return Flux.fromIterable(DynamoUtils.chunkList(new ArrayList<>(tripsWithoutDelayAttribute.entrySet()), 100))
-                .flatMap(chunkedList -> {
-                    List<ReadBatch> readBatches = chunkedList
-                            .stream()
-                            .map(e -> ReadBatch.builder(GtfsStaticData.class)
-                                    .addGetItem(Key
-                                            .builder()
-                                            .partitionValue(e.getKey() + ":" + e.getValue())
-                                            .sortValue(feedId + ":" + STOPTIME)
-                                            .build())
-                                    .mappedTableResource(table)
-                                    .build())
-                            .toList();
-                    BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
-                    return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
-                });
-    }
-
-    private static Key generateTripKey(String trip, String feedId) {
-        return Key
-                .builder()
-                .partitionValue(trip)
-                .sortValue(feedId + ":" + TRIP)
-                .build();
+    public Map<String, String> mapTripIdsToRouteName(String agencyId, List<String> tripIds) {
+        if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(tripIds)) return Collections.emptyMap();
+        List<String> uniqueTripIds = tripIds.stream().distinct().toList();
+        return DynamoUtils.chunkList(uniqueTripIds, 100).stream().flatMap(chunkList -> {
+            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, STOPTIME.getName())).build();
+            return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
+                    .flatMapIterable(p -> p.resultsForTable(table))
+                    .filter(GtfsStaticRepository::checkIdAndRouteName)
+                    .toStream();
+        }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
     }
 
     public Flux<GtfsStaticData> findAllStops(String feedId, List<String> stopIds) {
@@ -279,11 +225,34 @@ public class GtfsStaticRepository {
         });
     }
 
-    public Flux<GtfsStaticData> findAllStopTimes(String feedId, Collection<String> trips) {
-        return Flux.fromIterable(trips).flatMap(trip -> {
-            QueryConditional queryConditional = QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + STOPTIME).sortValue(trip).build());
-            return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), queryConditional);
-        });
+    /**
+     * Maps tripId and stopSequence to their respective departureTime and arrivalTime in the DB.
+     *
+     * @param feedId                     the feedId used to make database calls
+     * @param tripsWithoutDelayAttribute the list of tripIds and their associated stopSequence.
+     *                                   This is a map to prevent issues with making multiple calls for a single tripId,
+     *                                   which (should) be redundant...
+     *                                   we only store one tripId in the routeTimestamp db in the busstates list.
+     * @return a map from tripId to stopSequence to arrival/departure time
+     */
+    public Flux<GtfsStaticData> getTripMapFor(String feedId, Map<String, Integer> tripsWithoutDelayAttribute) {
+        return Flux.fromIterable(DynamoUtils.chunkList(new ArrayList<>(tripsWithoutDelayAttribute.keySet()), 100))
+                .flatMap(chunkedList -> {
+                    List<ReadBatch> readBatches = chunkedList
+                            .stream()
+                            .map(e -> ReadBatch.builder(GtfsStaticData.class)
+                                    .addGetItem(getStopTimeKey(feedId, e))
+                                    .mappedTableResource(table)
+                                    .build())
+                            .toList();
+                    BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
+                    return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
+                });
+    }
+
+    public Flux<GtfsStaticData> findAllStopTimes(String feedId, List<String> trips) {
+        var keys = trips.stream().distinct().map(t -> getStopTimeKey(feedId, t)).toList();
+        return cachedRepository.getCachedQuery(table, keys, GtfsStaticData.class, r -> Key.builder().partitionValue(r.getId()).sortValue(r.getAgencyType()).build());
     }
 
     public Flux<GtfsStaticData> findAllStops(String feedId) {
@@ -296,7 +265,7 @@ public class GtfsStaticRepository {
     }
 
     /**
-     * Gathers stops, stopTimes, and shapes for tripIds concurrently.
+     * Gathers stops, sequencedData, and shapes for tripIds concurrently.
      * This would have been a lot easier with a relational database, but here we are
      *
      * @param feedId
@@ -307,7 +276,7 @@ public class GtfsStaticRepository {
         if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
             return Flux.empty();
         }
-        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
+        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds));
     }
 
     /**
@@ -322,23 +291,15 @@ public class GtfsStaticRepository {
      * @return
      */
     public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
-        return findAllTrips(feedId, tripIds)
+        return findAllStopTimes(feedId, tripIds)
                 .mapNotNull(GtfsStaticData::getShapeId)
                 .distinct()
-                .flatMap(shapeId ->
-                        cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))
-                );
-    }
-
-    public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {
-        List<Key> keys = tripIds.stream().distinct().map(t -> generateTripKey(t, feedId)).toList();
-        return cachedRepository
-                .getCachedQuery(
-                        table,
-                        keys,
-                        GtfsStaticData.class,
-                        d ->
-                                generateTripKey(d.getTripId(), feedId)
+                .map(shapeId ->
+                        Key.builder().partitionValue(shapeId).sortValue(feedId + ":" + shapeId).build()
+                )
+                .bufferTimeout(100, Duration.ofMillis(250))
+                .flatMap(keys ->
+                        cachedRepository.getCachedQuery(table, keys, GtfsStaticData.class, d -> Key.builder().partitionValue(d.getId()).sortValue(d.getAgencyType()).build())
                 );
     }
 }

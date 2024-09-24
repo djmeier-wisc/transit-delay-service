@@ -4,6 +4,7 @@ import com.doug.projects.transitdelayservice.entity.MapOptions;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
+import com.doug.projects.transitdelayservice.entity.dynamodb.SequencedData;
 import com.doug.projects.transitdelayservice.entity.transit.ShapeProperties;
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
@@ -31,6 +32,7 @@ import static java.util.Comparator.naturalOrder;
 import static java.util.Objects.nonNull;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
+import static org.apache.commons.lang3.ObjectUtils.isNotEmpty;
 
 @Service
 @RequiredArgsConstructor
@@ -58,9 +60,9 @@ public class MapperService {
         return feature;
     }
 
-    public static List<LngLatAlt> divideShape(List<GtfsStaticData> gtfsStaticData, LngLatAlt from, LngLatAlt to) {
+    public static List<LngLatAlt> divideShape(List<SequencedData> gtfsStaticData, LngLatAlt from, LngLatAlt to) {
         gtfsStaticData = new ArrayList<>(gtfsStaticData);
-        gtfsStaticData.sort(Comparator.comparingInt(GtfsStaticData::getSequence));
+        gtfsStaticData.sort(Comparator.comparingInt(SequencedData::getSequenceNo));
 
         // Find the closest shape points for 'from' and 'to'
         int fromIndex = getClosestPointIndex(from, gtfsStaticData, true);
@@ -80,10 +82,10 @@ public class MapperService {
         return gtfsStaticData.subList(fromIndex, toIndex + 1).stream().map(MapperService::toLngLatAlt).toList();
     }
 
-    private static LngLatAlt toLngLatAlt(GtfsStaticData staticData) {
+    private static LngLatAlt toLngLatAlt(SequencedData staticData) {
         LngLatAlt lngLatAlt = new LngLatAlt();
-        lngLatAlt.setLatitude(staticData.getStopLat());
-        lngLatAlt.setLongitude(staticData.getStopLon());
+        lngLatAlt.setLatitude(staticData.getShapeLat());
+        lngLatAlt.setLongitude(staticData.getShapeLon());
         return lngLatAlt;
     }
 
@@ -95,13 +97,13 @@ public class MapperService {
      * @param findLowestIndex if multiple distances are equal, whether to return the lowest or highest one
      * @return the index of the shape closes to point
      */
-    private static int getClosestPointIndex(LngLatAlt point, List<GtfsStaticData> shapes, boolean findLowestIndex) {
+    private static int getClosestPointIndex(LngLatAlt point, List<SequencedData> shapes, boolean findLowestIndex) {
         double minDistance = Double.MAX_VALUE;
         int closestPoint = -1;
         if (findLowestIndex) { //record the lowest index, provided there are two equal ones
             for (int i = 0; i < shapes.size(); i++) {
-                GtfsStaticData shape = shapes.get(i);
-                double distance = haversineDistance(point.getLatitude(), point.getLongitude(), shape.getStopLat(), shape.getStopLon());
+                SequencedData shape = shapes.get(i);
+                double distance = haversineDistance(point.getLatitude(), point.getLongitude(), shape.getShapeLat(), shape.getShapeLon());
                 if (distance < minDistance) {
                     minDistance = distance;
                     closestPoint = i;
@@ -109,8 +111,8 @@ public class MapperService {
             }
         } else {
             for (int i = shapes.size() - 1; i >= 0; i--) {
-                GtfsStaticData shape = shapes.get(i);
-                double distance = haversineDistance(point.getLatitude(), point.getLongitude(), shape.getStopLat(), shape.getStopLon());
+                SequencedData shape = shapes.get(i);
+                double distance = haversineDistance(point.getLatitude(), point.getLongitude(), shape.getShapeLat(), shape.getShapeLon());
                 if (distance < minDistance) {
                     minDistance = distance;
                     closestPoint = i;
@@ -151,9 +153,6 @@ public class MapperService {
         var stopsByStopId = map.getOrDefault(GtfsStaticData.TYPE.STOP, emptyList())
                 .stream()
                 .collect(toMap(GtfsStaticData::getId, Function.identity()));
-        var tripsByTripId = map.getOrDefault(GtfsStaticData.TYPE.TRIP, emptyList())
-                .stream()
-                .collect(toMap(GtfsStaticData::getTripId, Function.identity()));
         var busStatesByTripId = routeTimestamps.stream()
                 .sorted(comparing(AgencyRouteTimestamp::getTimestamp))
                 .flatMap(l -> l.getBusStatesCopyList()
@@ -161,13 +160,16 @@ public class MapperService {
                 .collect(groupingBy(BusState::getTripId));
         Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> delayMapping = new HashMap<>();
         for (String tripId : stopTimesByTripId.keySet()) {
-            if (!tripsByTripId.containsKey(tripId)) continue;
-            String shapeId = tripsByTripId.get(tripId).getShapeId();
+            if (!stopsByStopId.containsKey(tripId)) continue;
+            String shapeId = stopsByStopId.get(tripId).getShapeId();
             List<BusState> busStatesForTripId = busStatesByTripId.getOrDefault(tripId, emptyList());
-            List<GtfsStaticData> stopTimesForTripId = stopTimesByTripId.getOrDefault(tripId, emptyList());
-            stopTimesForTripId.sort(comparing(GtfsStaticData::getSequence, naturalOrder()));
+            List<SequencedData> stopTimesForTripId = stopTimesByTripId.getOrDefault(tripId, emptyList()).stream()
+                    .filter(s -> isNotEmpty(s.getSequencedData()))
+                    .flatMap(s -> s.getSequencedData().stream())
+                    .toList();
+            stopTimesForTripId.sort(comparing(SequencedData::getSequenceNo, naturalOrder()));
             Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream()
-                    .collect(toMap(GtfsStaticData::getStopId, GtfsStaticData::getSequence, (a, b) -> a));
+                    .collect(toMap(SequencedData::getStopId, SequencedData::getSequenceNo, (a, b) -> a));
             for (int busStateIndex = 0; busStateIndex < busStatesForTripId.size() - 1; busStateIndex++) {
                 Integer fromDelay = busStatesForTripId.get(busStateIndex).getDelay();
                 if (fromDelay == null) fromDelay = 0;
@@ -220,11 +222,11 @@ public class MapperService {
 
     private static @NotNull LngLatAlt[] getStopPositions(Integer firstStopSequence,
                                                          Integer secondStopSequence,
-                                                         List<GtfsStaticData> stopTimesForTripId,
+                                                         List<SequencedData> stopTimesForTripId,
                                                          Map<String, GtfsStaticData> stopsByStopId) {
         LngLatAlt[] stopPositions = new LngLatAlt[secondStopSequence - firstStopSequence];
         for (int stopTimeIndex = firstStopSequence; stopTimeIndex < secondStopSequence; stopTimeIndex++) {
-            GtfsStaticData stopTime = stopTimesForTripId.get(stopTimeIndex);
+            SequencedData stopTime = stopTimesForTripId.get(stopTimeIndex);
             GtfsStaticData stop = stopsByStopId.get(stopTime.getStopId());
             int pos = stopTimeIndex - firstStopSequence;
             stopPositions[pos] = new LngLatAlt(stop.getStopLon(), stop.getStopLat());
@@ -305,13 +307,17 @@ public class MapperService {
             Map<LngLatAlt, ShapeProperties>> delayMapping) {
         var shapesByShapeId = map.getOrDefault(GtfsStaticData.TYPE.SHAPE, emptyList())
                 .stream()
-                .collect(groupingBy(GtfsStaticData::getShapeIdFromId));
+                .collect(groupingBy(GtfsStaticData::getShapeId));
         List<Feature> featureList = new ArrayList<>();
         delayMapping.forEach((from, toDelay) -> {
             toDelay.forEach((to, delayAndShape) -> {
                 Feature feature = new Feature();
                 LineString lineString = new LineString();
-                List<GtfsStaticData> shapeData = shapesByShapeId.getOrDefault(delayAndShape.getShapeId(), emptyList());
+                List<SequencedData> shapeData = shapesByShapeId.getOrDefault(delayAndShape.getShapeId(), emptyList())
+                        .stream()
+                        .filter(s -> isNotEmpty(s.getSequencedData()))
+                        .flatMap(s -> s.getSequencedData().stream())
+                        .toList();
                 lineString.setCoordinates(divideShape(shapeData, from, to));
                 feature.setGeometry(lineString);
                 feature.setProperty("averageDelay", delayAndShape.getDelay() / 60.);
