@@ -5,7 +5,6 @@ import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,7 +36,6 @@ public class CronService {
     private Boolean doesRealtimeCronRun;
 
     @Scheduled(fixedRate = 30, timeUnit = TimeUnit.DAYS)
-    @SchedulerLock(name = "feedLock", lockAtMostFor = "P29DT23H", lockAtLeastFor = "P29DT23H")
     public void writeFeeds() {
         if (!doesAgencyCronRun)
             return;
@@ -69,7 +67,6 @@ public class CronService {
      * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
      */
     @Scheduled(fixedRate = 5, timeUnit = TimeUnit.MINUTES)
-    @SchedulerLock(name = "realtimeLock", lockAtMostFor = "10m", lockAtLeastFor = "4m")
     public void writeGtfsRealtimeData() {
         if (!doesRealtimeCronRun)
             return;
@@ -94,7 +91,6 @@ public class CronService {
      * Attempts to poll all realtime feeds, except those which we are not authorized for. Writes realtime data to db, if it is available.
      */
     @Scheduled(fixedDelay = 7, timeUnit = TimeUnit.DAYS)
-    @SchedulerLock(name = "staticLock", lockAtMostFor = "P6DT23H", lockAtLeastFor = "P6DT23H")
     public void refreshOutdatedFeeds() {
         if (!doesRealtimeCronRun)
             return;
