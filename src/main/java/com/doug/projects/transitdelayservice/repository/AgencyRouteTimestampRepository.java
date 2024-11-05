@@ -12,6 +12,7 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -28,7 +29,7 @@ public class AgencyRouteTimestampRepository {
     private final DynamoDbAsyncTable<AgencyRouteTimestamp> table;
     private final CachedRepository cachedRepository;
 
-    public AgencyRouteTimestampRepository(DynamoDbEnhancedAsyncClient asyncEnhancedClient, CachedRepository cachedRepository) {
+    public AgencyRouteTimestampRepository(DynamoDbEnhancedAsyncClient asyncEnhancedClient, CachedRepository cachedRepository, DynamoDbClient client) {
         this.asyncEnhancedClient = asyncEnhancedClient;
         this.table = asyncEnhancedClient.table("routeTimestamp", TableSchema.fromBean(AgencyRouteTimestamp.class));
         this.cachedRepository = cachedRepository;
@@ -139,5 +140,9 @@ public class AgencyRouteTimestampRepository {
         QueryConditional query = QueryConditional.sortBetween(lowerBound, upperBound);
         QueryEnhancedRequest request = QueryEnhancedRequest.builder().queryConditional(query).build();
         return Flux.merge(table.query(request).items());
+    }
+
+    public CompletableFuture<Void> createTable() {
+        return table.createTable();
     }
 }

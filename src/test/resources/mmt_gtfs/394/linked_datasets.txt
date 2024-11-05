@@ -1,0 +1,4 @@
+url,trip_updates,vehicle_positions,service_alerts
+https://metromap.cityofmadison.com/gtfsrt/trips,1,0,0
+https://metromap.cityofmadison.com/gtfsrt/vehicles,0,1,0
+https://metromap.cityofmadison.com/gtfsrt/alerts,0,0,1

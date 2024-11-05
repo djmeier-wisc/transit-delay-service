@@ -1,0 +1,18 @@
+region: us-east-1
+metro:
+  feedId: 394
+openMobilityData:
+  feedSource: https://bit.ly/catalogs-csv
+spring:
+  codec:
+    max-in-memory-size: 1000KB
+  cache:
+    cache-names: delayLines
+    caffeine:
+      spec:
+        maximumSize: 50000
+        expireAfterAccess: 1d
+server:
+  port: 8080
+doesAgencyCronRun: false
+doesRealtimeCronRun: false

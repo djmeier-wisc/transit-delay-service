@@ -10,14 +10,17 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbAsyncTable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.model.CreateTableEnhancedRequest;
 import software.amazon.awssdk.enhanced.dynamodb.model.Page;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
 import software.amazon.awssdk.enhanced.dynamodb.model.WriteBatch;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.ID_INDEX;
 
@@ -29,7 +32,7 @@ public class AgencyFeedRepository {
     private final CachedRepository cachedRepository;
 
 
-    public AgencyFeedRepository(DynamoDbEnhancedAsyncClient enhancedClient, CachedRepository cachedRepository) {
+    public AgencyFeedRepository(DynamoDbEnhancedAsyncClient enhancedClient, CachedRepository cachedRepository, DynamoDbClient client) {
         this.enhancedClient = enhancedClient;
         table = enhancedClient.table("agencyFeeds", TableSchema.fromBean(AgencyFeed.class));
         this.cachedRepository = cachedRepository;
@@ -113,5 +116,9 @@ public class AgencyFeedRepository {
         return Flux.concat(table.index(ID_INDEX).query(queryConditional))
                 .flatMapIterable(Page::items)
                 .next();
+    }
+
+    public CompletableFuture<Void> createTable(CreateTableEnhancedRequest createAgencyFeedTableRequest) {
+        return table.createTable(createAgencyFeedTableRequest);
     }
 }

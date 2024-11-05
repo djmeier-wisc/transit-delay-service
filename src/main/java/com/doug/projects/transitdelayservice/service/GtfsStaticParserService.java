@@ -15,11 +15,10 @@ import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.zeroturnaround.zip.ZipUtil;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -47,6 +46,8 @@ public class GtfsStaticParserService {
     private static final DateTimeFormatter staticScheduleTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
     private final GtfsStaticRepository gtfsStaticRepository;
     private final AgencyFeedRepository agencyFeedRepository;
+    @Value("${fileService.outputDir:files}")
+    private String baseOutputDir;
 
     private static GtfsStaticData convert(RoutesAttributes routesAttributes, String agencyId, Map<String, String> routeIdToNameMap) {
         String routeName = routesAttributes.getRouteShortName();
@@ -149,42 +150,8 @@ public class GtfsStaticParserService {
         }
     }
 
-    private static void waitForRequest(FluxSink<List<Integer>> fluxSink) {
-        while (fluxSink.requestedFromDownstream() == 0) {
-            try {
-                Thread.sleep(100); // Sleep for 100ms until more requests arrive
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
     private static boolean isMissingArrivalsOrDepartures(SequencedData sequencedData) {
         return sequencedData.getDepartureTime() == null || sequencedData.getArrivalTime() == null;
-    }
-
-
-    private static @NotNull Map<String, GtfsStaticData> mapTripIdToGtfsData(String agencyId,
-                                                                            File file,
-                                                                            Map<String, String> tripIdToNameMap,
-                                                                            Map<String, String> stopIdToNameMap,
-                                                                            Map<String, String> tripIdToShapeIdMap) {
-        Map<String, GtfsStaticData> gtfsList = new HashMap<>();
-        try (MappingIterator<StopTimeAttributes> attributesIterator = getAttrItr(file, StopTimeAttributes.class)) {
-            while (attributesIterator.hasNext()) {
-                var a = attributesIterator.next();
-                gtfsList.putIfAbsent(a.getTripId(), convert(a, agencyId, tripIdToNameMap, stopIdToNameMap, tripIdToShapeIdMap));
-                var gtfsData = gtfsList.get(a.getTripId());
-                var stopTimes = gtfsData.getSequencedData();
-                if (stopTimes == null) {
-                    stopTimes = new ArrayList<>();
-                    gtfsData.setSequencedData(stopTimes);
-                }
-            }
-        } catch (IOException | DateTimeParseException e) {
-            log.error("Failed to read file: {}", file.getName(), e);
-        }
-        return gtfsList;
     }
 
     private void readAgencyTimezoneAndSaveToDb(String agencyId, File file) {
@@ -218,12 +185,16 @@ public class GtfsStaticParserService {
         if (agencyId == null) {
             log.error("Agency id null!");
         }
+        writeGtfsStaticDataToDynamoFromDiskSync(baseOutputDir, agencyId);
+    }
+
+    public void writeGtfsStaticDataToDynamoFromDiskSync(String baseDir, String agencyId) {
         Map<String, String> routeIdToNameMap = new HashMap<>();
         Map<String, String> tripIdToNameMap = new HashMap<>();
         Map<String, String> stopIdToNameMap = new HashMap<>();
         Map<String, String> tripIdToShapeIdMap = new HashMap<>();
         for (GtfsStaticData.TYPE value : GtfsStaticData.TYPE.values()) {
-            File file = new File("files" + File.separator + agencyId + File.separator + value.getFileName());
+            File file = new File(baseDir + File.separator + agencyId + File.separator + value.getFileName());
             try {
                 switch (value) {
                     case AGENCY -> readAgencyTimezoneAndSaveToDb(agencyId, file);
@@ -238,15 +209,14 @@ public class GtfsStaticParserService {
                     case SHAPE -> readShapeAndSaveToDb(agencyId, file);
                     default -> log.error("No case for type: {}", value);
                 }
-                file.delete();
                 log.info("{} read finished for id: {}", value.getName(), agencyId);
             } catch (Exception e) {
-                log.error("Exception while reading static files from disk for id: {}", feed.getId(), e);
+                log.error("Exception while reading static files from disk for id: {}", agencyId, e);
             } finally {
+                file.delete();
                 file.deleteOnExit();
             }
         }
-        new File("files" + File.separator + agencyId).delete();
         log.info("All file read finished for id: {}", agencyId);
     }
 
@@ -500,7 +470,7 @@ public class GtfsStaticParserService {
         }
         try (BufferedInputStream agencyGtfsZipStream = new BufferedInputStream(new URL(staticUrl).openStream())) {
             //all hail zt-zip. The code before this was hard to read and difficult to maintain
-            var outputDir = new File("files" + File.separator + feedId);
+            var outputDir = new File(baseOutputDir + File.separator + feedId);
             ZipUtil.unpack(agencyGtfsZipStream, outputDir, fileName -> {
                 //only write files that we have a valid TYPE to parse for.
                 GtfsStaticData.TYPE type = getTypeEndsWith(fileName.replace(".txt", ".csv"));

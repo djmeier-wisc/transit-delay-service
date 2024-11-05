@@ -9,6 +9,7 @@ import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
@@ -37,11 +38,13 @@ public class TransitDelayServiceApplication {
     }
 
     @Bean
+    @Profile("!test")
     public DynamoDbEnhancedClient provideDynamoDb() {
         return DynamoDbEnhancedClient.create();
     }
 
     @Bean
+    @Profile("!test")
     public DynamoDbEnhancedAsyncClient provideAsyncEnhancedClient() {
         return DynamoDbEnhancedAsyncClient.create();
     }
@@ -73,11 +76,13 @@ public class TransitDelayServiceApplication {
     }
 
     @Bean
+    @Profile("!test")
     public DynamoDbClient dynamoDbClient() {
         return DynamoDbClient.create();
     }
 
     @Bean
+    @Profile("!test")
     public LockProvider lockProvider(DynamoDbClient dynamoDB) {
         return new DynamoDBLockProvider(dynamoDB, "shedLock");
     }

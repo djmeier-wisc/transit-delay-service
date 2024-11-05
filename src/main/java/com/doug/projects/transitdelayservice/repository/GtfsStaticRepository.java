@@ -15,7 +15,7 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.*;
-import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 import java.time.Duration;
 import java.util.*;
@@ -37,14 +37,10 @@ public class GtfsStaticRepository {
     private final CachedRepository cachedRepository;
 
 
-    public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient, CachedRepository cachedRepository) {
+    public GtfsStaticRepository(DynamoDbEnhancedAsyncClient enhancedAsyncClient, CachedRepository cachedRepository, DynamoDbClient client) {
         this.enhancedAsyncClient = enhancedAsyncClient;
         this.table = enhancedAsyncClient.table("gtfsData", TableSchema.fromBean(GtfsStaticData.class));
         this.cachedRepository = cachedRepository;
-        try (var waiter = DynamoDbWaiter.create()) {
-            table.createTable();
-            waiter.waitUntilTableExists(builder -> builder.tableName("gtfsData"));
-        }
     }
 
     public void save(GtfsStaticData data) {
@@ -111,7 +107,7 @@ public class GtfsStaticRepository {
         }
     }
 
-    public Mono<List<GtfsStaticData>> findAllRoutes(String agencyId) {
+    public Flux<GtfsStaticData> findAllRoutes(String agencyId) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(k ->
                 k.partitionValue(agencyId + ":" + GtfsStaticData.TYPE.ROUTE.getName()));
         QueryEnhancedRequest queryEnhancedRequest = QueryEnhancedRequest.builder()
@@ -124,9 +120,7 @@ public class GtfsStaticRepository {
                 .flatMapIterable(Page::items)
                 .sort(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(Comparator.naturalOrder()))
                         .thenComparing(GtfsStaticData::getRouteName, nullsLast(Comparator.naturalOrder())))
-                .filter(gtfsStaticData -> Objects.nonNull(gtfsStaticData.getRouteName()))
-                .distinct()
-                .collectList();
+                .filter(gtfsStaticData -> Objects.nonNull(gtfsStaticData.getRouteName()));
     }
 
     /**
@@ -139,14 +133,13 @@ public class GtfsStaticRepository {
      */
     public Mono<List<String>> findAllRouteNames(String agencyId) {
         return this.findAllRoutes(agencyId)
-                .map(gtfsStaticData -> gtfsStaticData.stream()
-                        .sorted(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(naturalOrder()))
+                .sort(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(naturalOrder()))
                                 .thenComparing((GtfsStaticData d) -> parseFirstPartInt(d.getRouteName()), nullsLast(naturalOrder()))
                                 .thenComparing((GtfsStaticData d) -> parseLastPartInt(d.getRouteName()), nullsLast(naturalOrder()))
                                 .thenComparing(GtfsStaticData::getRouteName, nullsLast(naturalOrder())))
                         .map(GtfsStaticData::getRouteName)
                         .distinct()
-                        .toList());
+                .collectList();
     }
 
     private static boolean checkIdAndRouteName(GtfsStaticData staticData) {
@@ -175,18 +168,16 @@ public class GtfsStaticRepository {
     }
 
     public CompletableFuture<Map<String, String>> getRouteNameToColorMap(String agencyId) {
-        return this.findAllRoutes(agencyId).map(l ->
-                        l.stream()
+        return this.findAllRoutes(agencyId)
                                 .filter(route -> route != null && route.getRouteName() != null && route.getRouteColor() != null)
-                                .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor, (first, second) -> second)))
+                .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteColor, (first, second) -> second))
                 .toFuture();
     }
 
     public CompletableFuture<Map<String, Integer>> getRouteNameToSortOrderMap(String agencyId) {
-        return this.findAllRoutes(agencyId).map(l ->
-                        l.stream()
+        return this.findAllRoutes(agencyId)
                                 .filter(route -> route != null && route.getRouteName() != null && route.getRouteSortOrder() != null)
-                                .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder, (first, second) -> second)))
+                .collect(Collectors.toMap(GtfsStaticData::getRouteName, GtfsStaticData::getRouteSortOrder, (first, second) -> second))
                 .toFuture();
     }
 
@@ -301,5 +292,9 @@ public class GtfsStaticRepository {
                 .flatMap(keys ->
                         cachedRepository.getCachedQuery(table, keys, GtfsStaticData.class, d -> Key.builder().partitionValue(d.getId()).sortValue(d.getAgencyType()).build())
                 );
+    }
+
+    public CompletableFuture<Void> createTable(CreateTableEnhancedRequest createAgencyFeedTableRequest) {
+        return table.createTable(createAgencyFeedTableRequest);
     }
 }
