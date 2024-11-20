@@ -290,7 +290,7 @@ public class MapperService {
                 })
                 .map(Tuple2::getT1)
                 .collectList()
-                .zipWhen(routeTimestamps -> groupStaticData(feedId, routeTimestamps),
+                .zipWhen(routeTimestamps -> groupStaticData(feedId, routeTimestamps, mapOptions.getRouteName()),
                         ((routeTimestamps, map) -> getFeatureCollection(getFeatureList(map, getStopDelayMapping(routeTimestamps, map)))))
                 .cache();
     }
@@ -321,10 +321,11 @@ public class MapperService {
         return featureList;
     }
 
-    private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<AgencyRouteTimestamp> routeTimestamps) {
+    private Mono<Map<GtfsStaticData.TYPE, List<GtfsStaticData>>> groupStaticData(String feedId, List<AgencyRouteTimestamp> routeTimestamps, String routeName) {
         var busStates = routeTimestamps.stream().flatMap(s -> s.getBusStatesCopyList().stream()).toList();
         var tripIds = busStates.stream().map(BusState::getTripId).distinct().toList();
         return staticRepo.findStaticDataFor(feedId, tripIds)
+                .filter(d -> d.getRouteName() == null || d.getRouteName().equalsIgnoreCase(routeName))
                 .collect(Collectors.groupingBy(GtfsStaticData::getType));
     }
 }
