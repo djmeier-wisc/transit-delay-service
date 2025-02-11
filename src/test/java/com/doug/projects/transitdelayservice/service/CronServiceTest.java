@@ -2,6 +2,7 @@ package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.AgencyRealtimeResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
+import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,10 +11,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -49,7 +51,8 @@ class CronServiceTest {
     }
 
     private static AgencyRealtimeResponse getResponse() {
-        return AgencyRealtimeResponse.builder().feed(getAgencyFeedActive()).routeTimestamps(Collections.emptyList()).build();
+        List<AgencyRouteTimestamp> routeTimestamps = List.of(new AgencyRouteTimestamp());
+        return AgencyRealtimeResponse.builder().feed(getAgencyFeedActive()).routeTimestamps(routeTimestamps).build();
     }
 
     @BeforeEach
@@ -72,7 +75,7 @@ class CronServiceTest {
         when(agencyFeedRepository.getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE))
                 .thenReturn(getAgencyFeedList());
         when(rtResponseService.convertFromAsync(eq(getAgencyFeedActive()), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(getResponse()));
+                .thenReturn(Mono.just(getResponse()));
         ReflectionTestUtils.setField(cronService, "retryExecutor", executor);
         ReflectionTestUtils.setField(cronService, "dynamoExecutor", executor);
         cronService.refreshOutdatedFeeds();
@@ -85,17 +88,16 @@ class CronServiceTest {
     @Test
     void writeAllTypesDuringRealtimeCheck() {
         ReflectionTestUtils.setField(cronService, "doesRealtimeCronRun", true);
-        when(agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED))
-                .thenReturn(getAgencyFeedList());
+        when(agencyFeedRepository.getAgencyFeedsByStatusFlux(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED))
+                .thenReturn(Flux.fromIterable(getAgencyFeedList()));
         when(rtResponseService.convertFromAsync(eq(getAgencyFeedActive()), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(getResponse()));
-        ReflectionTestUtils.setField(cronService, "retryExecutor", executor);
-        ReflectionTestUtils.setField(cronService, "dynamoExecutor", executor);
+                .thenReturn(Mono.just(getResponse()));
+        when(retryOnFailureService.updateFeedStatus(eq(getResponse()))).thenReturn(List.of(new AgencyRouteTimestamp()));
         cronService.writeGtfsRealtimeData();
-        verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED);
+        verify(agencyFeedRepository, times(1)).getAgencyFeedsByStatusFlux(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED);
         verify(rtResponseService, times(1)).convertFromAsync(eq(getAgencyFeedActive()), anyInt());
         verify(retryOnFailureService, times(1)).updateFeedStatus(any());
-        verify(routeTimestampRepository, times(1)).saveAll(eq(Collections.emptyList()));
+        verify(routeTimestampRepository, times(1)).saveAll(eq(List.of(new AgencyRouteTimestamp())));
     }
 
     @Test

@@ -46,7 +46,7 @@ public class CronService {
             populateTimezoneFromOldFeeds(newFeeds);
             agencyFeedRepository.removeAllAgencyFeeds();
             agencyFeedRepository.writeAgencyFeeds(newFeeds);
-            log.info("Wrote feeds successfully.");
+            log.info("Wrote {} feeds successfully.", newFeeds.size());
         } catch (Exception e) {
             log.error("Failed to write gtfs static data", e);
         }
@@ -71,18 +71,13 @@ public class CronService {
         if (!doesRealtimeCronRun)
             return;
         log.info("Starting realtime data write");
-        CompletableFuture<?>[] allFutures =
-                agencyFeedRepository.getAgencyFeedsByStatus(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED)
-                        .stream()
-                        .map(feed ->
-                                rtResponseService.convertFromAsync(feed, 60)
-                                        .thenApplyAsync(retryOnFailureService::updateFeedStatus, retryExecutor)
-                                        .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
-                        .toArray(CompletableFuture[]::new);
-
-        CompletableFuture.allOf(allFutures)
-                .completeOnTimeout(null, 10, TimeUnit.MINUTES) //lets not miss more than two realtime writes of other feeds, if one is lagging
-                .join();
+        agencyFeedRepository.getAgencyFeedsByStatusFlux(ACTIVE, UNAVAILABLE, TIMEOUT, OUTDATED)
+                .flatMap(feed -> rtResponseService.convertFromAsync(feed, 60))
+                .flatMapIterable(retryOnFailureService::updateFeedStatus)
+                .buffer(25)
+                .doOnNext(routeTimestampRepository::saveAll)
+                .then()
+                .block();
 
         log.info("Finished realtime data write");
     }
@@ -99,7 +94,7 @@ public class CronService {
                 agencyFeedRepository.getAgencyFeedsByStatus(OUTDATED, UNAVAILABLE)
                         .stream()
                         .map(feed ->
-                                rtResponseService.convertFromAsync(feed, 60)
+                                rtResponseService.convertFromAsync(feed, 60).toFuture()
                                         .thenApplyAsync(retryOnFailureService::pollStaticFeedIfNeeded, retryExecutor)
                                         .thenAcceptAsync(routeTimestampRepository::saveAll, dynamoExecutor))
                         .toArray(CompletableFuture[]::new);

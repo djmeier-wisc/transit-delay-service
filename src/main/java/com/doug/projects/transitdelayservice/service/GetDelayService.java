@@ -13,15 +13,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import reactor.core.publisher.GroupedFlux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Optional;
+import java.util.stream.Collector;
 
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
 
@@ -32,6 +35,10 @@ public class GetDelayService {
     private final AgencyRouteTimestampRepository repository;
     private final LineGraphUtil lineGraphUtil;
 
+    private static double threeDigitPrecision(double initial) {
+        BigDecimal bd = new BigDecimal(initial).setScale(3, RoundingMode.HALF_UP);
+        return bd.doubleValue();
+    }
 
     /**
      * Gets the average delay of <code>routes</code> between <code>startTime</code> and <code>endTime</code>, returning
@@ -44,13 +51,12 @@ public class GetDelayService {
      * @throws IllegalArgumentException if startTime is >= endTime
      */
     public Mono<LineGraphDataResponse> getAverageDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
-        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::averageDelayInMinutes);
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil.toAvg());
     }
 
     public Mono<LineGraphDataResponse> getMedianDelay(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
-        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::medianDelayInMinutes);
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil.toMedian());
     }
-
 
     /**
      * Gets the MAX delay of <code>routes</code> between <code>startTime</code> and <code>endTime</code>, returning a
@@ -63,12 +69,7 @@ public class GetDelayService {
      * @throws IllegalArgumentException if startTime is >= endTime
      */
     public Mono<LineGraphDataResponse> getMaxDelayFor(String feedId, GraphOptions graphOptions) throws IllegalArgumentException {
-        //validations, if not set default
-        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil::maxDelayInMinutes);
-    }
-
-    public Mono<LineGraphDataResponse> getPercentOnTimeFor(String feedId, GraphOptions graphOptions, Integer lower, Integer upper) {
-        return genericLineGraphConverter(feedId, graphOptions, ((routeTimestampList) -> RouteTimestampUtil.percentOnTime(routeTimestampList, lower, upper)));
+        return genericLineGraphConverter(feedId, graphOptions, RouteTimestampUtil.toMax());
     }
 
     public Mono<LineGraphDataResponse> getPercentOnTimeFor(String feedId, GraphOptions graphOptions) {
@@ -78,21 +79,22 @@ public class GetDelayService {
         if (graphOptions.getUpperOnTimeThreshold() == null) {
             graphOptions.setUpperOnTimeThreshold(5);
         }
-        return genericLineGraphConverter(feedId, graphOptions, ((routeTimestampList) ->
-                RouteTimestampUtil.percentOnTime(routeTimestampList,
+        return genericLineGraphConverter(feedId, graphOptions,
+                RouteTimestampUtil.toPercentWithin(
                         graphOptions.getLowerOnTimeThreshold(),
-                        graphOptions.getUpperOnTimeThreshold())));
+                        graphOptions.getUpperOnTimeThreshold()
+                )
+        );
     }
 
     /**
      * Generic wrapper function that iterates over a collection of routeTimeStamps gathered from the DB.
      *
      * @param graphOptions the options used to create a graph
-     * @param converter    Maps a list of routeTimestamp to a data point on a graph
+     * @param collector    collects the list of delays to a double, which will appear on the graph. more memory efficient than previously
      * @return a graph, beginning at startTime, ending at endTime, over the number of units
      */
-    private Mono<LineGraphDataResponse> genericLineGraphConverter(String feedId, GraphOptions graphOptions, RouteTimestampConverter converter) {
-
+    private Mono<LineGraphDataResponse> genericLineGraphConverter(String feedId, GraphOptions graphOptions, Collector<Double, ?, Optional<Double>> collector) {
         final long startTime = graphOptions.getStartTime() == null ? TransitDateUtil.getMidnightSixDaysAgo() : graphOptions.getStartTime();
         final long endTime = graphOptions.getEndTime() == null ? TransitDateUtil.getMidnightTonight() : graphOptions.getEndTime();
         final int units = graphOptions.getUnits() == null ? 7 : graphOptions.getUnits();
@@ -101,10 +103,31 @@ public class GetDelayService {
         final boolean useGtfsColor = graphOptions.getUseColor() == null || graphOptions.getUseColor(); //default to false unless specified
         if (startTime >= endTime)
             return Mono.error(new IllegalArgumentException("StartTime must be less than endTime"));
+        final long bucketSize = (endTime - startTime) / units;
+        return repository.getRouteTimestampsBy(startTime, endTime, finalRoutes, finalFeedId)
+                .groupBy(AgencyRouteTimestamp::getRouteName)
+                .flatMap(routeNameGroup -> groupAndGetLineGraphData(collector, routeNameGroup, startTime, bucketSize))
+                .collectList()
+                .map(s -> getLineGraphDataResponse(s, finalFeedId, useGtfsColor, startTime, endTime, units));
+    }
 
-        return repository.getRouteTimestampsMapBy(startTime, endTime, finalRoutes, feedId)
-                .map(routeTimestampsMap -> getLineGraphData(converter, routeTimestampsMap, units, endTime, startTime))
-                .map(lineGraphDataList -> getLineGraphDataResponse(lineGraphDataList, finalFeedId, useGtfsColor, startTime, endTime, units));
+    private @NotNull Mono<LineGraphData> groupAndGetLineGraphData(Collector<Double, ?, Optional<Double>> collector,
+                                                                  GroupedFlux<String, AgencyRouteTimestamp> routeNameGroup,
+                                                                  long startTime,
+                                                                  long bucketSize) {
+        return routeNameGroup.groupBy(data -> {
+                    long epochMillis = data.getTimestamp();
+                    long bucketIndex = (epochMillis - startTime) / bucketSize;
+                    return startTime + (bucketIndex * bucketSize);
+                }).flatMap(bucketStartTimeGroup ->
+                        bucketStartTimeGroup.flatMapIterable(AgencyRouteTimestamp::getBusStatesCopyList)
+                                .map(busState -> busState.getDelay() / 60d)
+                                .collect(collector)
+                                .map(d -> Tuples.of(bucketStartTimeGroup.key(), d.map(GetDelayService::threeDigitPrecision)))
+                ).sort(Comparator.comparing(Tuple2::getT1)) //sort by timestamp, since the flux could have been grouped in any order
+                .map(t -> t.getT2().orElse(null))
+                .collectList()
+                .map(s -> lineGraphUtil.getLineGraphData(routeNameGroup.key(), s));
     }
 
     private @NotNull LineGraphDataResponse getLineGraphDataResponse(List<LineGraphData> lineGraphDataList, String finalFeedId, boolean useGtfsColor, long startTime, long endTime, int units) {
@@ -116,37 +139,5 @@ public class GetDelayService {
         response.setDatasets(lineGraphDataList);
         response.setLabels(getColumnLabels(startTime, endTime, units));
         return response;
-    }
-
-    private @NotNull List<LineGraphData> getLineGraphData(RouteTimestampConverter converter, Map<String, List<AgencyRouteTimestamp>> routeTimestampsMap, int units, long endTime, long startTime) {
-        return routeTimestampsMap.entrySet().parallelStream().map(routeFriendlyName -> {
-            List<AgencyRouteTimestamp> timestampsForRoute = routeFriendlyName.getValue();
-            if (timestampsForRoute == null) {
-                timestampsForRoute = Collections.emptyList();
-            }
-            List<Double> currData = new ArrayList<>(units * 2);
-            double perUnitSecondLength = (double) (endTime - startTime) / units;
-            int lastIndexUsed = 0;
-            for (int currUnit = 0; currUnit < units; currUnit++) {
-                final long finalCurrEndTime = (long) (startTime + (perUnitSecondLength * (currUnit + 1)));
-                int currLastIndex = timestampsForRoute.size();
-                for (int i = lastIndexUsed; i < timestampsForRoute.size(); i++) {
-                    if (timestampsForRoute.get(i).getTimestamp() >= finalCurrEndTime) {
-                        currLastIndex = i;
-                        break;
-                    }
-                }
-                Double converterResult = converter.convert(timestampsForRoute.subList(lastIndexUsed, currLastIndex));
-                if (converterResult != null) {
-                    BigDecimal bigDecimal = new BigDecimal(converterResult).setScale(3, RoundingMode.HALF_UP);
-                    currData.add(bigDecimal.doubleValue());
-                } else {
-                    currData.add(null);
-                }
-                //get ready for next iteration
-                lastIndexUsed = currLastIndex;
-            }
-            return lineGraphUtil.getLineGraphData(routeFriendlyName.getKey(), currData);
-        }).collect(Collectors.toList());
     }
 }

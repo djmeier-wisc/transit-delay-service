@@ -48,6 +48,18 @@ public class GtfsStaticRepository {
         }
     }
 
+    private static boolean checkIdAndRouteName(GtfsStaticData staticData) {
+        return staticData != null && staticData.getId() != null && staticData.getRouteName() != null;
+    }
+
+    private static Key generateTripKey(String trip, String feedId) {
+        return Key
+                .builder()
+                .partitionValue(trip)
+                .sortValue(feedId + ":" + TRIP)
+                .build();
+    }
+
     public void save(GtfsStaticData data) {
         table.putItem(data);
     }
@@ -170,20 +182,32 @@ public class GtfsStaticRepository {
                         .toList());
     }
 
-    private static boolean checkIdAndRouteName(GtfsStaticData staticData) {
-        return staticData != null && staticData.getId() != null && staticData.getRouteName() != null;
+    public Flux<GtfsStaticData> getTripIdsAndRouteIds(String agencyId, List<String> tripIds, List<String> routeIds) {
+        return Flux.merge(getTripsFromIds(agencyId, tripIds), getRoutesFromIds(agencyId, routeIds));
     }
 
-    public Map<String, String> mapRouteIdsToRouteName(String agencyId, List<String> routeIds) {
-        if (StringUtils.isBlank(agencyId) || CollectionUtils.isEmpty(routeIds)) return Collections.emptyMap();
-        List<String> uniqueRouteIds = routeIds.stream().distinct().toList();
-        return DynamoUtils.chunkList(uniqueRouteIds, 100).stream().flatMap(chunkList -> {
-            BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, chunkList, GtfsStaticData.TYPE.ROUTE.getName())).build();
-            return Flux.from(enhancedAsyncClient.batchGetItem(enhancedRequest))
-                    .flatMapIterable(p -> p.resultsForTable(table))
-                    .filter(GtfsStaticRepository::checkIdAndRouteName)
-                    .toStream();
-        }).collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName));
+    private Flux<GtfsStaticData> getRoutesFromIds(String agencyId, List<String> routeIds) {
+        return Flux.fromIterable(routeIds)
+                .distinct()
+                .buffer(100)
+                .flatMap(ids -> {
+                    BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, ids, GtfsStaticData.TYPE.ROUTE.getName())).build();
+                    return enhancedAsyncClient.batchGetItem(enhancedRequest);
+                })
+                .flatMapIterable(p -> p.resultsForTable(table))
+                .filter(GtfsStaticRepository::checkIdAndRouteName);
+    }
+
+    private Flux<GtfsStaticData> getTripsFromIds(String agencyId, List<String> tripIds) {
+        return Flux.fromIterable(tripIds)
+                .distinct()
+                .bufferTimeout(100, Duration.ofMillis(100))
+                .flatMap(ids -> {
+                    BatchGetItemEnhancedRequest enhancedRequest = BatchGetItemEnhancedRequest.builder().readBatches(generateReadBatches(agencyId, ids, GtfsStaticData.TYPE.TRIP.getName())).build();
+                    return enhancedAsyncClient.batchGetItem(enhancedRequest);
+                })
+                .flatMapIterable(p -> p.resultsForTable(table))
+                .filter(GtfsStaticRepository::checkIdAndRouteName);
     }
 
     public Map<String, String> mapTripIdsToRouteName(String agencyId, List<String> tripIds) {
@@ -251,14 +275,6 @@ public class GtfsStaticRepository {
                     BatchGetItemEnhancedRequest request = BatchGetItemEnhancedRequest.builder().readBatches(readBatches).build();
                     return enhancedAsyncClient.batchGetItem(request).resultsForTable(table);
                 });
-    }
-
-    private static Key generateTripKey(String trip, String feedId) {
-        return Key
-                .builder()
-                .partitionValue(trip)
-                .sortValue(feedId + ":" + TRIP)
-                .build();
     }
 
     public Flux<GtfsStaticData> findAllStops(String feedId, List<String> stopIds) {

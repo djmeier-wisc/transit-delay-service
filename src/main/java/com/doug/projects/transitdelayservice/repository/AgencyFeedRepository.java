@@ -82,6 +82,12 @@ public class AgencyFeedRepository {
                 .join();
     }
 
+    public Flux<AgencyFeed> getAgencyFeedsByStatusFlux(AgencyFeed.Status... statusList) {
+        return Flux.fromArray(statusList).flatMap(s ->
+                table.query(q -> q.queryConditional(QueryConditional.keyEqualTo(k -> k.partitionValue(s.toString()))))
+        ).flatMapIterable(Page::items);
+    }
+
     public Flux<AgencyFeed> getFeedFluxByStatus(AgencyFeed.Status status) {
         return Flux.concat(table
                 .query(q ->

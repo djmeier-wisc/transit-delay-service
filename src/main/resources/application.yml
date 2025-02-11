@@ -5,6 +5,7 @@ metro:
   feedId: 394
 openMobilityData:
   feedSource: https://bit.ly/catalogs-csv
+  allowedIds: 394,1318
 spring:
   codec:
     max-in-memory-size: 1000KB
