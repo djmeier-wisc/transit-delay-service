@@ -5,6 +5,7 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -17,7 +18,12 @@ class RouteTimestampUtilTest {
         List<AgencyRouteTimestamp> timestampsForRoute =
                 List.of(createRouteTimestamp(1), createRouteTimestamp(2), createRouteTimestamp(3));
 
-        Double result = RouteTimestampUtil.maxDelayInMinutes(timestampsForRoute);
+        Double result = timestampsForRoute.stream()
+                .map(AgencyRouteTimestamp::getBusStatesCopyList)
+                .flatMap(Collection::stream)
+                .map(b -> (double) b.getDelay() / 60d)
+                .collect(RouteTimestampUtil.toMax())
+                .get();
 
         assertEquals(2, result);
     }
@@ -27,8 +33,12 @@ class RouteTimestampUtilTest {
         List<AgencyRouteTimestamp> timestampsForRoute =
                 List.of(createRouteTimestamp(1), createRouteTimestamp(2), createRouteTimestamp(3));
 
-        Double result = RouteTimestampUtil.percentOnTime(timestampsForRoute, 1, 1);
-
+        Double result = timestampsForRoute.stream()
+                .map(AgencyRouteTimestamp::getBusStatesCopyList)
+                .flatMap(Collection::stream)
+                .map(b -> (double) b.getDelay() / 60d)
+                .collect(RouteTimestampUtil.toPercentWithin(1, 1))
+                .get();
         assertEquals(50.0, result);
     }
 
@@ -54,9 +64,14 @@ class RouteTimestampUtilTest {
         List<AgencyRouteTimestamp> timestampsForRoute =
                 List.of(createRouteTimestamp(1), createRouteTimestamp(2), createRouteTimestamp(3));
 
-        Double result = RouteTimestampUtil.medianDelayInMinutes(timestampsForRoute);
+        Double result = timestampsForRoute.stream()
+                .map(AgencyRouteTimestamp::getBusStatesCopyList)
+                .flatMap(Collection::stream)
+                .map(b -> (double) b.getDelay() / 60d)
+                .collect(RouteTimestampUtil.toMedian())
+                .get();
 
-        assertEquals(2, result);
+        assertEquals(1.5, result);
     }
 
     private AgencyRouteTimestamp createRouteTimestamp(long timestamp) {

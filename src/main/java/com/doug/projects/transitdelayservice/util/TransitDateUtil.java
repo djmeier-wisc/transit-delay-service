@@ -57,7 +57,7 @@ public class TransitDateUtil {
      * @param timeZoneId      The timezone to parse this in, IE "America/Chicago"
      * @return the number of seconds difference.
      */
-    public static long calculateTimeDifferenceInSeconds(String expectedTime, long actualTimestamp, String timeZoneId) throws DateTimeException {
+    public static int calculateTimeDifferenceInSeconds(String expectedTime, long actualTimestamp, String timeZoneId) throws DateTimeException {
         ZoneId timezone = ZoneId.of(timeZoneId);
         expectedTime = replaceGreaterThan24Hr(expectedTime);
         expectedTime = addLeadingZero(expectedTime);
@@ -68,11 +68,11 @@ public class TransitDateUtil {
         long diff = actualTimestamp - zonedDateTime.toEpochSecond();
         if (Math.abs(diff) > (TWENTY_FOUR_HOURS_IN_SECONDS / 2)) {//if diff is > 12 hrs, it probably shouldn't be
             if (diff > 0) {
-                return diff - TWENTY_FOUR_HOURS_IN_SECONDS;
+                return (int) (diff - TWENTY_FOUR_HOURS_IN_SECONDS);
             }
-            return TWENTY_FOUR_HOURS_IN_SECONDS - Math.abs(diff);
+            return (int) (TWENTY_FOUR_HOURS_IN_SECONDS - Math.abs(diff));
         }
-        return diff;
+        return (int) diff;
     }
 
     private static String addLeadingZero(String expectedTime) {

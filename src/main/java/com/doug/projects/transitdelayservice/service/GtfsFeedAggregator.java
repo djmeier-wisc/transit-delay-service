@@ -12,10 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -24,9 +21,11 @@ import java.util.stream.Collectors;
 public class GtfsFeedAggregator {
     @Value("${openMobilityData.feedSource}")
     private String feedUrl;
+    @Value("#{'${openMobilityData.allowedIds}'.split(',')}")
+    private Set<String> allowedFeedIds;
 
     private static boolean isTripUpdateFeed(OpenMobilitySource f) {
-        return "US".equals(f.getCountryCode()) && "tu".equals(f.getEntityType()) && StringUtils.isBlank(f.getStatus()) && StringUtils.isNotBlank(f.getStaticReference());
+        return "tu".equals(f.getEntityType()) && StringUtils.isNotBlank(f.getStaticReference());
     }
 
     private static String findNewStaticId(String oldStaticId, Map<String, String> oldIdToNewIdMap) {
@@ -85,7 +84,7 @@ public class GtfsFeedAggregator {
     public List<AgencyFeed> gatherRTFeeds() {
         List<OpenMobilitySource> allSources = gatherAllFeedData();
         //all OMS, grouped by id
-        Map<String, OpenMobilitySource> allSourcesMap = allSources.stream()
+        Map<String, OpenMobilitySource> allSourcesMap = gatherAllFeedData().stream()
                 .collect(Collectors.toMap(OpenMobilitySource::getMdbSourceId, Function.identity()));
         //all redirect ids, mapped to their old OMS
         Map<String, OpenMobilitySource> redirectMap = allSources.stream()
@@ -97,10 +96,12 @@ public class GtfsFeedAggregator {
         //all realTime tripUpdate feeds
         List<OpenMobilitySource> rtFeeds = allSources.stream()
                 .filter(GtfsFeedAggregator::isTripUpdateFeed)
+                .filter(f -> StringUtils.isEmpty(f.getRedirectId()))
                 .toList();
 
 
         return rtFeeds.stream()
+                .filter(f -> allowedFeedIds.contains(findRootRTFeed(f.getMdbSourceId(), allSourcesMap, redirectMap)))
                 .map(rtFeed -> {
                     OpenMobilitySource staticFeed =
                             allSourcesMap.get(findNewStaticId(rtFeed.getStaticReference(), oldIdToNewIdMap));

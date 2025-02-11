@@ -1,65 +1,69 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
-import org.jetbrains.annotations.NotNull;
-import org.springframework.util.CollectionUtils;
-
 import java.util.*;
-import java.util.stream.IntStream;
+import java.util.stream.Collector;
 
 public class RouteTimestampUtil {
-    public static Double maxDelayInMinutes(List<AgencyRouteTimestamp> timestampsForRoute) {
-
-        OptionalInt maxDelay =
-                timestampsForRoute.stream().flatMapToInt(RouteTimestampUtil::getDelayStream).max();
-        if (maxDelay.isEmpty()) {
-            return null;
-        }
-        return ((double) maxDelay.getAsInt()) / 60;
+    public static Collector<Double, DoubleSummaryStatistics, Optional<Double>> toAvg() {
+        return Collector.of(
+                DoubleSummaryStatistics::new,
+                DoubleSummaryStatistics::accept,
+                (left, right) -> {
+                    left.combine(right);
+                    return left;
+                },
+                stats -> stats.getCount() > 0 ? Optional.of(stats.getAverage()) : Optional.empty() // Finisher: gets max
+        );
     }
 
-    public static Double percentOnTime(List<AgencyRouteTimestamp> timestampsForRoute, Integer lowerMinutes, Integer upperMinutes) {
-
-        int[] allBusStates = timestampsForRoute.stream()
-                .flatMapToInt(RouteTimestampUtil::getDelayStream)
-                .toArray();
-
-        Double percentOnTime =
-                ((double) Arrays.stream(allBusStates).filter(delay -> delay / 60 >= lowerMinutes && delay / 60 <= upperMinutes).count() /
-                        allBusStates.length) * 100;
-        if (allBusStates.length == 0) {
-            return null;
-        }
-        return percentOnTime;
-
+    public static Collector<Double, List<Double>, Optional<Double>> toMedian() {
+        return Collector.of(
+                ArrayList::new,   // Supplier: creates a new list
+                List::add,        // Accumulator: adds elements to the list
+                (left, right) -> {
+                    left.addAll(right);
+                    return left;
+                }, // Combiner: merges two lists
+                list -> {
+                    if (list.isEmpty()) return Optional.empty();
+                    Collections.sort(list);
+                    int size = list.size();
+                    if (size % 2 == 1) {
+                        return Optional.of(list.get(size / 2));
+                    } else {
+                        return Optional.of((list.get(size / 2 - 1) + list.get(size / 2)) / 2.0);
+                    }
+                }
+        );
     }
 
-    @NotNull
-    private static IntStream getDelayStream(AgencyRouteTimestamp rt) {
-        return rt.getBusStatesCopyList().stream().filter(busState -> Objects.nonNull(busState.getDelay())).mapToInt(BusState::getDelay);
+    public static Collector<Double, DoubleSummaryStatistics, Optional<Double>> toMax() {
+        return Collector.of(
+                DoubleSummaryStatistics::new,
+                DoubleSummaryStatistics::accept,
+                (left, right) -> {
+                    left.combine(right);
+                    return left;
+                },
+                stats -> stats.getCount() > 0 ? Optional.of(stats.getMax()) : Optional.empty() // Finisher: gets max
+        );
     }
 
-    public static Double medianDelayInMinutes(List<AgencyRouteTimestamp> routeTimestampList) {
-        if (CollectionUtils.isEmpty(routeTimestampList)) return null;
-        int[] sortedDelayList = routeTimestampList.stream()
-                .flatMapToInt(RouteTimestampUtil::getDelayStream)
-                .filter(Objects::nonNull)
-                .sorted() //sort by delay to get median
-                .toArray();
-        if (sortedDelayList.length == 0) {
-            return null;
-        }
-        return (double) (sortedDelayList[sortedDelayList.length / 2] / 60);
-    }
-
-    public static Double averageDelayInMinutes(List<AgencyRouteTimestamp> routeTimestampList) {
-        OptionalDouble resp = routeTimestampList.stream()
-                .flatMapToInt(RouteTimestampUtil::getDelayStream)
-                .average();
-        if (resp.isEmpty()) {
-            return null;
-        }
-        return resp.getAsDouble() / 60.;
+    public static Collector<Double, ?, Optional<Double>> toPercentWithin(double min, double max) {
+        return Collector.of(
+                () -> new double[2], // creates an array {countWithin, totalCount}
+                (acc, value) -> {
+                    if (value >= min && value <= max) {
+                        acc[0]++;
+                    }
+                    acc[1]++;
+                },
+                (left, right) -> {
+                    left[0] += right[0];
+                    left[1] += right[1];
+                    return left;
+                },
+                acc -> acc[1] == 0 ? Optional.empty() : Optional.of((acc[0] / acc[1]) * 100)
+        );
     }
 }
