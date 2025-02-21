@@ -8,7 +8,7 @@ import java.util.Set;
 
 @Data
 public class MapOptions {
-    String routeName;
+    List<String> routeNames;
     int searchPeriod = 30;
     int hourStarted = 0;
     int hourEnded = 23;

@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.geojson.*;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
@@ -267,7 +268,7 @@ public class MapperService {
 
     //    @Cacheable(value = DELAY_LINES_CACHE)
     public Mono<FeatureCollection> getDelayLines(String feedId, MapOptions mapOptions) {
-        if (StringUtils.isBlank(mapOptions.getRouteName()) || StringUtils.isBlank(feedId)) {
+        if (CollectionUtils.isEmpty(mapOptions.getRouteNames()) || StringUtils.isBlank(feedId)) {
             log.error("Failed either due to empty feedId or empty routeName");
             return Mono.just(new FeatureCollection());
         }
@@ -275,7 +276,7 @@ public class MapperService {
         Flux<String> agencyTimezone = agencyFeedRepository.getAgencyFeedById(feedId, true).map(f -> f.getTimezone() == null ? "" : f.getTimezone()).cache().repeat();
         return Flux.zip(routeTimestampRepository.getRouteTimestampsBy(getMidnightDaysAgo(mapOptions.getSearchPeriod()),
                         getMidnightTonight(),
-                        List.of(mapOptions.getRouteName()),
+                        mapOptions.getRouteNames(),
                         feedId), agencyTimezone)
                 .filter(routeTimestamp -> {
                     var date = Instant.ofEpochSecond(routeTimestamp.getT1().getTimestamp());
