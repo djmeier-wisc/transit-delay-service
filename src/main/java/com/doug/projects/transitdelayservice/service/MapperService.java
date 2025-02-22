@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.GtfsShape;
 import com.doug.projects.transitdelayservice.entity.MapOptions;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
@@ -9,6 +10,7 @@ import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import io.micrometer.common.util.StringUtils;
+import io.netty.util.internal.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.geojson.*;
@@ -18,6 +20,7 @@ import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -327,5 +330,22 @@ public class MapperService {
         var tripIds = busStates.stream().map(BusState::getTripId).distinct().toList();
         return staticRepo.findStaticDataFor(feedId, tripIds)
                 .collect(Collectors.groupingBy(GtfsStaticData::getType));
+    }
+
+    public Mono<GtfsShape> getRandomGtfsShape(String feedId) {
+        return staticRepo.getAllTrips(feedId)
+                .reduce(Tuples.of(0, ""), (i, data) -> {
+                    var count = i.getT1() + 1;
+                    String chosen = (ThreadLocalRandom.current().nextLong(count) == 0) && data.getShapeId() != null ? data.getShapeId() : i.getT2();
+                    return Tuples.of(count, chosen);
+                })
+                .map(Tuple2::getT2)
+                .flatMapMany(id ->
+                        staticRepo.getShapeById(feedId, id)
+                )
+                .sort(Comparator.comparing(GtfsStaticData::getSequence))
+                .map(shapePoint -> List.of(shapePoint.getStopLat(), shapePoint.getStopLon()))
+                .collectList()
+                .map(points -> GtfsShape.builder().shape(points).build());
     }
 }

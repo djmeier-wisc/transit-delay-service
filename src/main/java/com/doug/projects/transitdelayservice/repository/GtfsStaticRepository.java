@@ -170,7 +170,7 @@ public class GtfsStaticRepository {
      * @param agencyId the agencyId to search the DB for
      * @return the routeNames associated with that agency.
      */
-    public Mono<List<String>> findAllRouteNames(String agencyId) {
+    public Mono<List<String>> findAllRouteNamesSorted(String agencyId) {
         return this.findAllRoutes(agencyId)
                 .map(gtfsStaticData -> gtfsStaticData.stream()
                         .sorted(comparing(GtfsStaticData::getRouteSortOrder, nullsLast(naturalOrder()))
@@ -323,7 +323,7 @@ public class GtfsStaticRepository {
         if (StringUtils.isEmpty(feedId) || CollectionUtils.isEmpty(tripIds)) {
             return Flux.empty();
         }
-        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapes(feedId, tripIds), findAllTrips(feedId, tripIds));
+        return Flux.concat(findAllStops(feedId), findAllStopTimes(feedId, tripIds), findAllShapesByTripIds(feedId, tripIds), findAllTrips(feedId, tripIds));
     }
 
     /**
@@ -337,13 +337,17 @@ public class GtfsStaticRepository {
      * @param tripIds
      * @return
      */
-    public Flux<GtfsStaticData> findAllShapes(String feedId, List<String> tripIds) {
+    public Flux<GtfsStaticData> findAllShapesByTripIds(String feedId, List<String> tripIds) {
         return findAllTrips(feedId, tripIds)
                 .mapNotNull(GtfsStaticData::getShapeId)
                 .distinct()
                 .flatMap(shapeId ->
                         cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), QueryConditional.sortBeginsWith(Key.builder().partitionValue(feedId + ":" + SHAPE).sortValue(shapeId).build()))
                 );
+    }
+
+    public Flux<GtfsStaticData> findAllShapesByRouteName(String feedId, String routeName) {
+        return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_INDEX), QueryConditional.keyEqualTo(Key.builder().partitionValue(feedId + ":" + SHAPE).build()));
     }
 
     public Flux<GtfsStaticData> findAllTrips(String feedId, List<String> tripIds) {
@@ -356,5 +360,13 @@ public class GtfsStaticRepository {
                         d ->
                                 generateTripKey(d.getTripId(), feedId)
                 );
+    }
+
+    public Flux<GtfsStaticData> getAllTrips(String feedId) {
+        return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_INDEX), QueryConditional.keyEqualTo(Key.builder().partitionValue(feedId + ":" + TRIP).build()));
+    }
+
+    public Flux<GtfsStaticData> getShapeById(String feedId, String shapeId) {
+        return cachedRepository.getCachedQuery(table.index(AGENCY_TYPE_ID_INDEX), QueryConditional.sortBeginsWith(Key.builder().sortValue(shapeId).partitionValue(feedId + ":" + SHAPE).build()));
     }
 }
