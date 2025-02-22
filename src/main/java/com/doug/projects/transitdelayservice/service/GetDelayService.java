@@ -4,6 +4,7 @@ import com.doug.projects.transitdelayservice.entity.GraphOptions;
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
 import com.doug.projects.transitdelayservice.entity.LineGraphDataResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.util.LineGraphUtil;
 import com.doug.projects.transitdelayservice.util.RouteTimestampUtil;
@@ -121,7 +122,8 @@ public class GetDelayService {
                     return startTime + (bucketIndex * bucketSize);
                 }).flatMap(bucketStartTimeGroup ->
                         bucketStartTimeGroup.flatMapIterable(AgencyRouteTimestamp::getBusStatesCopyList)
-                                .map(busState -> busState.getDelay() / 60d)
+                                .mapNotNull(BusState::getDelay)
+                                .map(delay -> delay / 60d)
                                 .collect(collector)
                                 .map(d -> Tuples.of(bucketStartTimeGroup.key(), d.map(GetDelayService::threeDigitPrecision)))
                 ).sort(Comparator.comparing(Tuple2::getT1)) //sort by timestamp, since the flux could have been grouped in any order

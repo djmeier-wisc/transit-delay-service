@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.GtfsShape;
 import com.doug.projects.transitdelayservice.entity.MapOptions;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
@@ -9,14 +10,17 @@ import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
 import io.micrometer.common.util.StringUtils;
+import io.netty.util.internal.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.geojson.*;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -267,7 +271,7 @@ public class MapperService {
 
     //    @Cacheable(value = DELAY_LINES_CACHE)
     public Mono<FeatureCollection> getDelayLines(String feedId, MapOptions mapOptions) {
-        if (StringUtils.isBlank(mapOptions.getRouteName()) || StringUtils.isBlank(feedId)) {
+        if (CollectionUtils.isEmpty(mapOptions.getRouteNames()) || StringUtils.isBlank(feedId)) {
             log.error("Failed either due to empty feedId or empty routeName");
             return Mono.just(new FeatureCollection());
         }
@@ -275,7 +279,7 @@ public class MapperService {
         Flux<String> agencyTimezone = agencyFeedRepository.getAgencyFeedById(feedId, true).map(f -> f.getTimezone() == null ? "" : f.getTimezone()).cache().repeat();
         return Flux.zip(routeTimestampRepository.getRouteTimestampsBy(getMidnightDaysAgo(mapOptions.getSearchPeriod()),
                         getMidnightTonight(),
-                        List.of(mapOptions.getRouteName()),
+                        mapOptions.getRouteNames(),
                         feedId), agencyTimezone)
                 .filter(routeTimestamp -> {
                     var date = Instant.ofEpochSecond(routeTimestamp.getT1().getTimestamp());
@@ -326,5 +330,22 @@ public class MapperService {
         var tripIds = busStates.stream().map(BusState::getTripId).distinct().toList();
         return staticRepo.findStaticDataFor(feedId, tripIds)
                 .collect(Collectors.groupingBy(GtfsStaticData::getType));
+    }
+
+    public Mono<GtfsShape> getRandomGtfsShape(String feedId) {
+        return staticRepo.getAllTrips(feedId)
+                .reduce(Tuples.of(0, ""), (i, data) -> {
+                    var count = i.getT1() + 1;
+                    String chosen = (ThreadLocalRandom.current().nextLong(count) == 0) && data.getShapeId() != null ? data.getShapeId() : i.getT2();
+                    return Tuples.of(count, chosen);
+                })
+                .map(Tuple2::getT2)
+                .flatMapMany(id ->
+                        staticRepo.getShapeById(feedId, id)
+                )
+                .sort(Comparator.comparing(GtfsStaticData::getSequence))
+                .map(shapePoint -> List.of(shapePoint.getStopLat(), shapePoint.getStopLon()))
+                .collectList()
+                .map(points -> GtfsShape.builder().shape(points).build());
     }
 }

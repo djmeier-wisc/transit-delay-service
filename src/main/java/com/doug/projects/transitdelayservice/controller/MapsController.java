@@ -1,5 +1,6 @@
 package com.doug.projects.transitdelayservice.controller;
 
+import com.doug.projects.transitdelayservice.entity.GtfsShape;
 import com.doug.projects.transitdelayservice.entity.MapOptions;
 import com.doug.projects.transitdelayservice.service.MapperService;
 import lombok.RequiredArgsConstructor;
@@ -24,5 +25,10 @@ public class MapsController {
     public Mono<FeatureCollection> getDelayLines(@PathVariable String feedId,
                                                  MapOptions mapOptions) {
         return mapperService.getDelayLines(feedId, mapOptions);
+    }
+
+    @GetMapping("/v1/map/{feedId}/randomRoute")
+    public Mono<GtfsShape> getRandomRoute(@PathVariable String feedId) {
+        return mapperService.getRandomGtfsShape(feedId);
     }
 }
