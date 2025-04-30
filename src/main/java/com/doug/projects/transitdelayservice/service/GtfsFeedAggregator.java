@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
+@Slf4j
 public class GtfsFeedAggregator {
     @Value("${openMobilityData.feedSource}")
     private String feedUrl;
@@ -72,6 +74,7 @@ public class GtfsFeedAggregator {
                             .readValues(in);
             return routesAttributesIterator.readAll();
         } catch (IOException e) {
+            log.error("Failed to read feeds", e);
             return Collections.emptyList();
         }
     }
