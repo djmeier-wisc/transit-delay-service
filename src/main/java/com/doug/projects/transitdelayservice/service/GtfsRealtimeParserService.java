@@ -221,7 +221,7 @@ public class GtfsRealtimeParserService {
                 .map(GtfsRealtime.TripUpdate::getTrip)
                 .filter(Objects::nonNull)
                 .map(GtfsRealtime.TripDescriptor::getRouteId)
-                .filter(Objects::nonNull)
+                .filter(StringUtils::isNotBlank)
                 .distinct()
                 .toList();
     }
@@ -231,7 +231,7 @@ public class GtfsRealtimeParserService {
                 .map(GtfsRealtime.TripUpdate::getTrip)
                 .filter(Objects::nonNull)
                 .map(GtfsRealtime.TripDescriptor::getTripId)
-                .filter(Objects::nonNull)
+                .filter(StringUtils::isNotBlank)
                 .distinct()
                 .toList();
     }
