@@ -14,18 +14,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.GroupedFlux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collector;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import static com.doug.projects.transitdelayservice.util.LineGraphUtil.getColumnLabels;
 
@@ -107,30 +108,56 @@ public class GetDelayService {
         final long bucketSize = (endTime - startTime) / units;
         return repository.getRouteTimestampsBy(startTime, endTime, finalRoutes, finalFeedId)
                 .groupBy(AgencyRouteTimestamp::getRouteName)
-                .flatMap(routeNameGroup -> groupAndGetLineGraphData(collector, routeNameGroup, startTime, bucketSize))
+                .flatMap(routeNameGroup -> groupAndGetLineGraphData(collector, routeNameGroup, startTime, endTime, bucketSize))
                 .collectList()
                 .map(s -> getLineGraphDataResponse(s, finalFeedId, useGtfsColor, startTime, endTime, units));
     }
 
-    private @NotNull Mono<LineGraphData> groupAndGetLineGraphData(Collector<Double, ?, Optional<Double>> collector,
-                                                                  GroupedFlux<String, AgencyRouteTimestamp> routeNameGroup,
-                                                                  long startTime,
-                                                                  long bucketSize) {
-        return routeNameGroup.groupBy(data -> {
-                    long epochMillis = data.getTimestamp();
-                    long bucketIndex = (epochMillis - startTime) / bucketSize;
-                    return startTime + (bucketIndex * bucketSize);
-                }).flatMap(bucketStartTimeGroup ->
-                        bucketStartTimeGroup.flatMapIterable(AgencyRouteTimestamp::getBusStatesCopyList)
-                                .mapNotNull(BusState::getDelay)
-                                .map(delay -> delay / 60d)
-                                .collect(collector)
-                                .map(d -> Tuples.of(bucketStartTimeGroup.key(), d.map(GetDelayService::threeDigitPrecision)))
-                ).sort(Comparator.comparing(Tuple2::getT1)) //sort by timestamp, since the flux could have been grouped in any order
-                .map(t -> t.getT2().orElse(null))
+    private @NotNull Mono<LineGraphData> groupAndGetLineGraphData(
+            Collector<Double, ?, Optional<Double>> collector,
+            GroupedFlux<String, AgencyRouteTimestamp> routeNameGroup,
+            long startTime,
+            long endTime,
+            long bucketSize) {
+
+        return routeNameGroup
                 .collectList()
-                .map(s -> lineGraphUtil.getLineGraphData(routeNameGroup.key(), s));
+                .flatMap(routeTimestamps -> {
+                    // Total number of expected buckets (inclusive of startTime and endTime)
+                    long bucketCount = ((endTime - startTime) / bucketSize);
+
+                    // Step 1: Group data into buckets based on timestamp
+                    Map<Long, List<AgencyRouteTimestamp>> grouped = routeTimestamps.stream()
+                            .collect(Collectors.groupingBy(data -> {
+                                long bucketIndex = (data.getTimestamp() - startTime) / bucketSize;
+                                return startTime + (bucketIndex * bucketSize);
+                            }));
+
+                    // Step 2: For each expected bucket time, get processed value or null
+                    List<Mono<Optional<Double>>> bucketMonos = LongStream.range(0, bucketCount)
+                            .mapToObj(i -> startTime + (i * bucketSize))
+                            .map(bucketStart -> {
+                                List<AgencyRouteTimestamp> bucketData = grouped.get(bucketStart);
+                                if (bucketData == null || bucketData.isEmpty()) {
+                                    return Mono.just(Optional.<Double>empty());
+                                }
+
+                                return Flux.fromIterable(bucketData)
+                                        .flatMapIterable(AgencyRouteTimestamp::getBusStatesCopyList)
+                                        .mapNotNull(BusState::getDelay)
+                                        .map(delay -> delay / 60d)
+                                        .collect(collector)
+                                        .map(opt -> opt.map(GetDelayService::threeDigitPrecision));
+                            })
+                            .toList();
+
+                    // Step 3: Assemble final result list with nulls where data is missing
+                    return Flux.concat(bucketMonos)
+                            .collectList()
+                            .map(bucketValues -> lineGraphUtil.getLineGraphData(routeNameGroup.key(), bucketValues.stream().map(o -> o.orElse(null)).toList()));
+                });
     }
+
 
     private @NotNull LineGraphDataResponse getLineGraphDataResponse(List<LineGraphData> lineGraphDataList, String finalFeedId, boolean useGtfsColor, long startTime, long endTime, int units) {
         lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);

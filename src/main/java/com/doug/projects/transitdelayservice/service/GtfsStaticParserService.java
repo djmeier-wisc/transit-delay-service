@@ -232,7 +232,6 @@ public class GtfsStaticParserService {
                     case SHAPE ->
                             readGtfsAndSaveToDb(agencyId, file, ShapeAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
                     default -> log.error("No case for type: {}", value);
-                    //TODO consider shapes.txt, maybe add it in the future?
                 }
                 file.delete();
                 log.info("{} read finished for id: {}", value.getName(), agencyId);

@@ -263,6 +263,7 @@ public class GtfsStaticRepository {
                 .flatMap(chunkedList -> {
                     List<ReadBatch> readBatches = chunkedList
                             .stream()
+                            .peek(e -> log.info("{}: Getting trip {} position {}", feedId, e.getKey(), e.getValue()))
                             .map(e -> ReadBatch.builder(GtfsStaticData.class)
                                     .addGetItem(Key
                                             .builder()
