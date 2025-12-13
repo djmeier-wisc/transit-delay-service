@@ -51,12 +51,11 @@ public class AgencyRouteTimestamp {
         return agencyId + ":" + routeName;
     }
 
-    public boolean setAgencyRoute(String agencyId, String routeName) {
+    public void setAgencyRoute(String agencyId, String routeName) {
         if (StringUtils.contains(agencyId, ":") || StringUtils.contains(routeName, ":")) {
-            return false;
+            return;
         }
         agencyRoute = createKey(agencyId, routeName);
-        return true;
     }
 
     /**

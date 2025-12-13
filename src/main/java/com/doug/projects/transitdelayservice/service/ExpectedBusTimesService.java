@@ -1,16 +1,18 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeed;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyStopTime;
+import com.doug.projects.transitdelayservice.entity.jpa.StopTimeId;
 import com.doug.projects.transitdelayservice.entity.transit.ExpectedBusTimes;
-import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyFeedRepository;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyStopTimeRepository;
 import com.google.transit.realtime.GtfsRealtime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.doug.projects.transitdelayservice.service.GtfsRealtimeParserService.getFirstScheduled;
@@ -19,24 +21,24 @@ import static com.doug.projects.transitdelayservice.service.GtfsRealtimeParserSe
 @RequiredArgsConstructor
 public class ExpectedBusTimesService {
     private final AgencyFeedRepository agencyRepository;
-    private final GtfsStaticRepository staticRepository;
+    private final AgencyStopTimeRepository agencyStopTimeRepository;
 
-    public Mono<ExpectedBusTimes> getTripMapFor(String feedId, Map<String, Integer> tripsWithoutDelayAttribute) {
+    public ExpectedBusTimes getTripMapFor(String feedId, Map<String, Integer> tripsWithoutDelayAttribute) {
         if (tripsWithoutDelayAttribute.isEmpty()) {
-            return Mono.empty();
+            return new ExpectedBusTimes();
         }
-        return Mono.zip(staticRepository.getTripMapFor(feedId, tripsWithoutDelayAttribute).collectList(), agencyRepository.getAgencyFeedById(feedId, false))
-                .map(tuple -> {
-                    var staticData = tuple.getT1();
-                    var agencyData = tuple.getT2();
-                    ExpectedBusTimes map = new ExpectedBusTimes();
-                    for (GtfsStaticData data : staticData) {
-                        map.putDeparture(data.getTripId(), data.getSequence(), data.getDepartureTime());
-                        map.putArrival(data.getTripId(), data.getSequence(), data.getArrivalTime());
-                    }
-                    map.setTimezone(agencyData.getTimezone());
-                    return map;
-                });
+        List<StopTimeId> ids = tripsWithoutDelayAttribute.entrySet().stream()
+                        .map(e->new StopTimeId(e.getKey(),e.getValue()))
+                        .toList();
+        List<AgencyStopTime> agencyStopTimes = agencyStopTimeRepository.findAllByIdInAndTripRouteAgencyId(ids,feedId);
+        Optional<AgencyFeed> feed = agencyRepository.findById(feedId);
+        var busTimes = new ExpectedBusTimes();
+        for (AgencyStopTime i : agencyStopTimes) {
+            busTimes.putDeparture(i.getTripId(), i.getStopSeq(), i.getDepartureTimeSecs());
+            busTimes.putArrival(i.getTripId(), i.getStopSeq(), i.getArrivalTimeSecs());
+            busTimes.setTimezone(feed.map(AgencyFeed::getTimezone).orElse(null));
+        }
+        return busTimes;
     }
 
     public static Map<String, Integer> getTripsWithoutDelayAttribute(List<GtfsRealtime.TripUpdate> tripUpdates) {
@@ -66,7 +68,7 @@ public class ExpectedBusTimesService {
         return tripUpdate.getTrip().getTripId();
     }
 
-    public Mono<ExpectedBusTimes> getTripMapFor(String feedId, List<GtfsRealtime.TripUpdate> tripUpdates) {
+    public ExpectedBusTimes getTripMapFor(String feedId, List<GtfsRealtime.TripUpdate> tripUpdates) {
         return getTripMapFor(feedId, getTripsWithoutDelayAttribute(tripUpdates));
     }
 }

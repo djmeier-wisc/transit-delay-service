@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.entity;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import lombok.Builder;
 import lombok.Data;
 
@@ -10,5 +10,5 @@ import lombok.Data;
 public class AgencyStaticStatus {
     private boolean success;
     private String message;
-    private AgencyFeed feed;
+    private AgencyFeedDto feed;
 }

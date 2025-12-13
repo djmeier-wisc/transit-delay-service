@@ -1,7 +1,6 @@
 package com.doug.projects.transitdelayservice.repository;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Repository;

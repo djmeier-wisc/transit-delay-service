@@ -6,9 +6,6 @@ WORKDIR /app
 # Copy only the POM file to cache dependencies
 COPY pom.xml .
 
-# Download dependencies and build the application
-RUN mvn dependency:go-offline
-
 # Copy the entire project and build it
 COPY . .
 RUN mvn package -DskipTests

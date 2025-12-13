@@ -110,7 +110,7 @@ public class GetDelayService {
                 .groupBy(AgencyRouteTimestamp::getRouteName)
                 .flatMap(routeNameGroup -> groupAndGetLineGraphData(collector, routeNameGroup, startTime, endTime, bucketSize))
                 .collectList()
-                .map(s -> getLineGraphDataResponse(s, finalFeedId, useGtfsColor, startTime, endTime, units));
+                .map(s -> getLineGraphDataResponse(s, finalFeedId, useGtfsColor, startTime, endTime, units, finalRoutes));
     }
 
     private @NotNull Mono<LineGraphData> groupAndGetLineGraphData(
@@ -159,7 +159,7 @@ public class GetDelayService {
     }
 
 
-    private @NotNull LineGraphDataResponse getLineGraphDataResponse(List<LineGraphData> lineGraphDataList, String finalFeedId, boolean useGtfsColor, long startTime, long endTime, int units) {
+    private @NotNull LineGraphDataResponse getLineGraphDataResponse(List<LineGraphData> lineGraphDataList, String finalFeedId, boolean useGtfsColor, long startTime, long endTime, int units, List<String> finalRoutes) {
         lineGraphUtil.sortByGTFSSortOrder(finalFeedId, lineGraphDataList);
         if (useGtfsColor) {
             lineGraphUtil.populateColor(finalFeedId, lineGraphDataList);

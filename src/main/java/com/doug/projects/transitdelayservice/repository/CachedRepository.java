@@ -1,6 +1,5 @@
 package com.doug.projects.transitdelayservice.repository;
 
-import com.doug.projects.transitdelayservice.util.DynamoUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;

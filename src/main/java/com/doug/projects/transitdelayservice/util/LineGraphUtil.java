@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import com.doug.projects.transitdelayservice.repository.GtfsStaticService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +15,7 @@ import static org.apache.commons.lang3.math.NumberUtils.toInt;
 @Component
 @RequiredArgsConstructor
 public class LineGraphUtil {
-    private final GtfsStaticRepository gtfsStaticRepository;
+    private final GtfsStaticService gtfsStaticService;
 
     public static List<String> getColumnLabels(Long startTime, Long endTime, Integer units) {
         double perUnitSecondLength = (double) (endTime - startTime) / units;
@@ -80,8 +80,7 @@ public class LineGraphUtil {
     }
 
     public void sortByGTFSSortOrder(String feedId, List<LineGraphData> lineGraphDataList) {
-        Map<String, Integer> sortOrderMap = gtfsStaticRepository.getRouteNameToSortOrderMap(feedId)
-                .join();
+        Map<String, Integer> sortOrderMap = gtfsStaticService.getRouteNameToSortOrderMap(feedId);
         lineGraphDataList.sort(
                 comparing((LineGraphData data) -> sortOrderMap.get(data.getLineLabel()), nullsLast(naturalOrder()))
                         .thenComparing((LineGraphData d) -> parseFirstPartInt(d.getLineLabel()), nullsLast(naturalOrder()))
@@ -91,7 +90,7 @@ public class LineGraphUtil {
     }
 
     public void populateColor(String feedId, List<LineGraphData> lineGraphDataList) {
-        var colorMap = gtfsStaticRepository.getRouteNameToColorMap(feedId).join();
+        var colorMap = gtfsStaticService.getRouteNameToColorMap(feedId);
         lineGraphDataList.forEach(lineGraphData -> {
             var color = colorMap.get(lineGraphData.getLineLabel());
             //by accident, if color is not provided in gtfs file, we put #null in the db. Whoops. This fixes that

@@ -3,6 +3,7 @@ package com.doug.projects.transitdelayservice.util;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.*;
+import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
@@ -48,31 +49,49 @@ public class TransitDateUtil {
         return startAndEndTimesList;
     }
 
+    public static int calculateTimeDifferenceInSeconds(String expectedTimeSecs, long actualTimestamp, String timeZoneId) {
+        return calculateTimeDifferenceInSeconds(convertGtfsTimeToSeconds(expectedTimeSecs),actualTimestamp,timeZoneId);
+    }
+
     /**
-     * Performs actualTime - expectedTime. For example, if actualTime is 12:32 and expectedTime is 12:25, this would
-     * return 7 (mins) * 60 (seconds in min)
+     * Performs actualTime - expectedTime, resolving the expected time against the
+     * service date implied by the actual timestamp.
      *
-     * @param expectedTime    The expected arrival/departure of a bus, in format H:mm:ss
-     * @param actualTimestamp The actual arrival/departure time of a bus, in epoch seconds
-     * @param timeZoneId      The timezone to parse this in, IE "America/Chicago"
-     * @return the number of seconds difference.
+     * @param expectedTimeSecs The expected arrival/departure time as the total number of
+     * seconds since midnight of the service day (e.g., 91800 for 25:30:00).
+     * @param actualTimestamp  The actual arrival/departure time, in epoch seconds (long).
+     * @param timeZoneId       The timezone to parse this in, IE "America/Chicago".
+     * @return The number of seconds difference: positive for delay (late), negative for early.
+     * @throws DateTimeException if the timezone ID is invalid.
      */
-    public static int calculateTimeDifferenceInSeconds(String expectedTime, long actualTimestamp, String timeZoneId) throws DateTimeException {
-        ZoneId timezone = ZoneId.of(timeZoneId);
-        expectedTime = replaceGreaterThan24Hr(expectedTime);
-        expectedTime = addLeadingZero(expectedTime);
-        LocalTime time = LocalTime.parse(expectedTime);
-        LocalDate date = LocalDate.ofInstant(Instant.ofEpochSecond(actualTimestamp), timezone);
-        ZonedDateTime zonedDateTime = ZonedDateTime.of(date, time, timezone);
-        //SCENARIO: in certain cases, we have an actualTime of 11:54, but the expectedTime is 12:01 AM, or vice versa
-        long diff = actualTimestamp - zonedDateTime.toEpochSecond();
-        if (Math.abs(diff) > (TWENTY_FOUR_HOURS_IN_SECONDS / 2)) {//if diff is > 12 hrs, it probably shouldn't be
-            if (diff > 0) {
-                return (int) (diff - TWENTY_FOUR_HOURS_IN_SECONDS);
-            }
-            return (int) (TWENTY_FOUR_HOURS_IN_SECONDS - Math.abs(diff));
+    public static int calculateTimeDifferenceInSeconds(Integer expectedTimeSecs, long actualTimestamp, String timeZoneId)
+            throws DateTimeException {
+
+        if (expectedTimeSecs == null) {
+            throw new IllegalArgumentException("Expected time (in seconds) cannot be null.");
         }
-        return (int) diff;
+        ZoneId timezone = ZoneId.of(timeZoneId);
+        Instant actualInstant = Instant.ofEpochSecond(actualTimestamp);
+        ZonedDateTime actualZonedDateTime = actualInstant.atZone(timezone);
+        ZonedDateTime midnightOfServiceDay = actualZonedDateTime
+                .toLocalDate()
+                .atStartOfDay(timezone)
+                .truncatedTo(ChronoUnit.SECONDS);
+
+        ZonedDateTime expectedZonedDateTime = midnightOfServiceDay.plusSeconds(expectedTimeSecs);
+
+
+        long expectedTimestamp = expectedZonedDateTime.toEpochSecond();
+
+        long differenceInSeconds = actualTimestamp - expectedTimestamp;
+
+        if(differenceInSeconds > TWENTY_FOUR_HOURS_IN_SECONDS / 2) {
+            differenceInSeconds -= TWENTY_FOUR_HOURS_IN_SECONDS;
+        } else if (differenceInSeconds < -TWENTY_FOUR_HOURS_IN_SECONDS / 2) {
+            differenceInSeconds += TWENTY_FOUR_HOURS_IN_SECONDS;
+        }
+
+        return (int) differenceInSeconds;
     }
 
     private static String addLeadingZero(String expectedTime) {
@@ -93,5 +112,28 @@ public class TransitDateUtil {
             expectedTime = expectedTime.replace(hr, newHr);
         }
         return expectedTime;
+    }
+
+    /**
+     * Converts a GTFS time string (HH:mm:ss, potentially > 24 hours)
+     * into the total number of seconds since midnight of the service day.
+     * @param gtfsTimeString The arrival/departure time (e.g., "25:30:00").
+     * @return Total seconds since midnight.
+     */
+    public static int convertGtfsTimeToSeconds(String gtfsTimeString) {
+        String[] parts = gtfsTimeString.split(":");
+        if (parts.length != 3) {
+            // Handle error or invalid format
+            return 0;
+        }
+
+        long hours = Long.parseLong(parts[0]);
+        long minutes = Long.parseLong(parts[1]);
+        long seconds = Long.parseLong(parts[2]);
+
+        return (int) Duration.ofHours(hours)
+                .plusMinutes(minutes)
+                .plusSeconds(seconds)
+                .getSeconds();
     }
 }

@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.util;
 
 import com.doug.projects.transitdelayservice.entity.LineGraphData;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import com.doug.projects.transitdelayservice.repository.GtfsStaticService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -19,7 +19,7 @@ import static org.mockito.Mockito.*;
 class LineGraphUtilTest {
 
     @Mock
-    private GtfsStaticRepository repository;
+    private GtfsStaticService repository;
 
     @InjectMocks
     private LineGraphUtil lineGraphUtil;
@@ -46,9 +46,7 @@ class LineGraphUtilTest {
         var feedId = "TestFeed";
         var lineGraphData = List.of(createLineGraphData("r1"), createLineGraphData("r2"));
         when(repository.getRouteNameToColorMap(feedId)).thenReturn(
-                CompletableFuture.completedFuture(
                         Map.of("r1", "#FFF111", "r2", "#FFF222")
-                )
         );
         lineGraphUtil.populateColor(feedId, lineGraphData);
         assertEquals("#FFF111", lineGraphData.get(0).getBorderColor());
@@ -62,7 +60,7 @@ class LineGraphUtilTest {
                         "Route2"));//out of order, route3 should be 3rd
 
         // Mocking the behavior of the repository
-        when(repository.getRouteNameToSortOrderMap(feedId)).thenReturn(CompletableFuture.completedFuture(Map.of("Route1", 1, "Route2", 2, "Route3", 3)));
+        when(repository.getRouteNameToSortOrderMap(feedId)).thenReturn(Map.of("Route1", 1, "Route2", 2, "Route3", 3));
 
         lineGraphUtil.sortByGTFSSortOrder(feedId, lineGraphDatas);
 

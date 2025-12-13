@@ -15,6 +15,12 @@ spring:
       spec:
         maximumSize: 50000
         expireAfterAccess: 1d
+  datasource:
+    # The hostname 'db' is the name of the PostgreSQL service in your docker-compose.yml
+    url: jdbc:postgresql://db:5432/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
 server:
   port: 8080
 doesAgencyCronRun: true
