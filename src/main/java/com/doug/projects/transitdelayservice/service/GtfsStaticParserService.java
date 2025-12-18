@@ -122,18 +122,23 @@ public class GtfsStaticParserService {
             return;
         }
         readAgencyTimezoneAndSaveToDb(agencyId);
-        var agencyRouteMap = saveRoutes(agency, agencyId);
-        var agencyShapes = saveShapes(agencyId);
-        var agencyTripMap = saveTrips(agencyRouteMap,agencyShapes, agencyId);
-        agencyRouteMap.clear();
+        log.info("Saving routes...");
+        saveRoutes(agency, agencyId);
+        log.info("Saving trips...");
+        var maps = saveTrips(agencyId);
+        var agencyTripMap = maps.get(0);
+        log.info("Saving shapes...");
+        saveShapes(agencyId);
+        log.info("Saving stops...");
         var agencyStopMap = saveStops(agencyId);
+        log.info("Saving stopTimes...");
         saveStopTimes(agencyTripMap,agencyStopMap,agencyId, agency.get().getTimezone());
         new File("files" + File.separator + agencyId).delete();
         log.info("All file read finished for id: {}", agencyId);
     }
 
     private void saveStopTimes(Map<String, AgencyTrip> agencyTripMap, Map<String, AgencyStop> agencyStopMap, String agencyId, String timezone) {
-        File file = new File("files" + File.separator + agencyId + File.separator + STOP.getFileName());
+        File file = new File("files" + File.separator + agencyId + File.separator + STOPTIME.getFileName());
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
         try (MappingIterator<StopTimeAttributes> attributesIterator = csvMapper
@@ -142,19 +147,16 @@ public class GtfsStaticParserService {
                 .with(CsvParser.Feature.TRIM_SPACES)
                 .readValues(file)) {
 
-            // Use a list to batch save stop times, which is more efficient
             List<AgencyStopTime> stopTimesToSave = new ArrayList<>();
-
+            String tripId = null;
             while (attributesIterator.hasNext()) {
                 var stopTime = attributesIterator.next();
 
-                // 1. Convert times to seconds since midnight
                 int arrivalSecs = TransitDateUtil.convertGtfsTimeToSeconds(stopTime.getArrivalTime());
                 int departureSecs = TransitDateUtil.convertGtfsTimeToSeconds(stopTime.getDepartureTime());
 
-                // Check if the trip and stop exist before building the entity
                 AgencyTrip trip = agencyTripMap.get(stopTime.getTripId());
-                AgencyStop stop = agencyStopMap.get(stopTime.getStopId()); // Use agencyStopMap here
+                AgencyStop stop = agencyStopMap.get(stopTime.getStopId());
 
                 if (trip == null || stop == null) {
                     log.warn("Skipping StopTime for tripId: {} or stopId: {} - Missing reference data.",
@@ -163,24 +165,28 @@ public class GtfsStaticParserService {
                 }
 
                 var entity = AgencyStopTime.builder()
-                        .id(StopTimeId.builder()
-                                .tripId(stopTime.getTripId())
+                        .id(AgencyStopTimeId.builder()
                                 .stopSequence(stopTime.getStopSequence())
-                                .build())
+                                .agencyId(agencyId)
+                                .tripId(stopTime.getTripId())
+                                .build()
+                        )
                         .trip(trip)
                         .stop(stop)
-                        .stopSeq(stopTime.getStopSequence())
-                        // Store the integer seconds value
+                        .stopId(stop.getStopId())
                         .arrivalTimeSecs(arrivalSecs)
                         .departureTimeSecs(departureSecs)
                         .build();
-
+                if (tripId != null && !Objects.equals(stopTime.getTripId(), tripId)) {
+                    interpolateDelay(stopTimesToSave);
+                    agencyStopTimeRepository.saveAllAndFlush(stopTimesToSave);
+                    stopTimesToSave.clear();
+                }
                 stopTimesToSave.add(entity);
+                tripId = stopTime.getTripId();
             }
-
-            // Batch save the stop times
-            agencyStopTimeRepository.saveAll(stopTimesToSave); // Assuming you have this repository
-
+            interpolateDelay(stopTimesToSave);
+            agencyStopTimeRepository.saveAllAndFlush(stopTimesToSave);
         } catch (IOException e) {
             log.error("Failed to read {} stop times", agencyId, e);
         }
@@ -204,7 +210,7 @@ public class GtfsStaticParserService {
             while (attributesIterator.hasNext()) {
                 var stop = attributesIterator.next();
                 var entity = AgencyStop.builder()
-                        .id(stop.getStopId())
+                        .id(new AgencyStopId(stop.getStopId(), agencyId))
                         .stopName(stop.getStopName())
                         .stopLat(stop.getStopLat())
                         .stopLon(stop.getStopLon())
@@ -219,11 +225,10 @@ public class GtfsStaticParserService {
         return stopMap;
     }
 
-    private Map<String,List<AgencyShape>> saveShapes(String agencyId) {
+    private void saveShapes(String agencyId) {
         File file = new File("files" + File.separator + agencyId + File.separator + SHAPE.getFileName());
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
-        Map<String,List<AgencyShape>> shapesMap = new HashMap<>();
         try (MappingIterator<ShapeAttributes> attributesIterator = csvMapper
                 .readerWithSchemaFor(ShapeAttributes.class)
                 .with(schema)
@@ -233,9 +238,10 @@ public class GtfsStaticParserService {
             while (attributesIterator.hasNext()) {
                 ShapeAttributes shapeAttrs = attributesIterator.next();
                 var entity = AgencyShape.builder()
-                        .id(ShapePointId.builder()
+                        .id(AgencyShapeId.builder()
                                 .shapeId(shapeAttrs.getShapeId())
                                 .sequence(shapeAttrs.getShapePtSequence())
+                                .agencyId(agencyId)
                                 .build())
                         .shapePtLat(shapeAttrs.getShapePtLat())
                         .shapePtLon(shapeAttrs.getShapePtLon())
@@ -245,20 +251,19 @@ public class GtfsStaticParserService {
                     agencyShapeRepository.saveAll(shapes);
                     shapes.clear();
                 }
-                shapesMap.computeIfAbsent(entity.getId().getShapeId(), s->new ArrayList<>());
-                shapesMap.get(entity.getId().getShapeId()).add(entity);
             }
             agencyShapeRepository.saveAll(shapes);
         } catch (IOException e) {
             log.error("Failed to read {} shapes", agencyId);
         }
+        agencyShapeRepository.flush();
         file.delete();
-        return shapesMap;
     }
 
-    private Map<String, AgencyTrip> saveTrips(Map<String, AgencyRoute> agencyRouteMap, Map<String, List<AgencyShape>> agencyShapes, String agencyId) {
+    private List<Map<String, AgencyTrip>> saveTrips(String agencyId) {
         File file = new File("files" + File.separator + agencyId + File.separator + TRIP.getFileName());
         Map<String, AgencyTrip> tripMap = new HashMap<>();
+        Map<String, AgencyTrip> shapeMap = new HashMap<>();
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
         try (MappingIterator<TripAttributes> attributesIterator = csvMapper
@@ -269,21 +274,23 @@ public class GtfsStaticParserService {
             while (attributesIterator.hasNext()) {
                 TripAttributes tripsAttributes = attributesIterator.next();
                 var entity = AgencyTrip.builder()
-                        .id(tripsAttributes.getTripId())
-                        .route(agencyRouteMap.get(tripsAttributes.getRouteId()))
-                        .shapePoints(agencyShapes.get(tripsAttributes.getShapeId()))
+                        .id(new AgencyTripId(tripsAttributes.getTripId(), agencyId))
+                        .routeId(tripsAttributes.getRouteId())
+                        .shapeId(tripsAttributes.getShapeId())
                         .build();
-                tripMap.putIfAbsent(entity.getId(), entity);
+                tripMap.putIfAbsent(entity.getTripId(), entity);
+                shapeMap.putIfAbsent(tripsAttributes.getShapeId(), entity);
             }
             agencyTripRepository.saveAll(tripMap.values());
         } catch (IOException e) {
             log.error("Failed to read {} trips", agencyId);
         }
         file.delete();
-        return tripMap;
+        agencyTripRepository.flush();
+        return List.of(tripMap, shapeMap);
     }
 
-    private Map<String, AgencyRoute> saveRoutes(Optional<AgencyFeed> agency, String agencyId) {
+    private void saveRoutes(Optional<AgencyFeed> agency, String agencyId) {
         File file = new File("files" + File.separator + agencyId + File.separator + ROUTE.getFileName());
         Map<String, AgencyRoute> routeMap = new HashMap<>();
         CsvMapper csvMapper = new CsvMapper();
@@ -298,20 +305,20 @@ public class GtfsStaticParserService {
                 var routesName = routesAttributes.getRouteShortName();
                 if (isBlank(routesName)) routesName = routesAttributes.getRouteLongName();
                 var entity = AgencyRoute.builder()
-                        .id(routesAttributes.getRouteId())
+                        .id(new AgencyRouteId(routesAttributes.getRouteId(), agencyId))
                         .agency(agency.get())
                         .routeName(routesName)
                         .routeColor('#' + routesAttributes.getRouteColor())
                         .routeSortOrder(routesAttributes.getRouteSortOrder())
                         .build();
-                routeMap.putIfAbsent(entity.getId(), entity);
+                routeMap.putIfAbsent(entity.getRouteId(), entity);
             }
             agencyRouteRepository.saveAll(routeMap.values());
         } catch (IOException e) {
             log.error("Failed to read {} routes", agencyId);
         }
         file.delete();
-        return routeMap;
+        agencyRouteRepository.flush();
     }
 
     /**

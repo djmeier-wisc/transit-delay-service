@@ -7,16 +7,20 @@ import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.jpa.*;
 import com.doug.projects.transitdelayservice.entity.transit.ShapeProperties;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
-import com.doug.projects.transitdelayservice.repository.jpa.AgencyShapeRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticService;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyShapeRepository;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyStopTimeRepository;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.geojson.*;
+import org.geojson.Feature;
+import org.geojson.FeatureCollection;
+import org.geojson.LineString;
+import org.geojson.LngLatAlt;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.time.Instant;
@@ -24,7 +28,8 @@ import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.doug.projects.transitdelayservice.util.TransitDateUtil.*;
+import static com.doug.projects.transitdelayservice.util.TransitDateUtil.getMidnightDaysAgo;
+import static com.doug.projects.transitdelayservice.util.TransitDateUtil.getMidnightTonight;
 import static java.util.Collections.emptyList;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
@@ -115,15 +120,16 @@ public class MapperService {
      * Maps delays from one stop (stored as a lat and long), to another (also stored as a lat and long). Then, maps that data to the average delay between those two stops.
      *
      * @param routeTimestamps
+     * @param feedId
      * @return
      */
     @NotNull
-    protected Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> getStopDelayMapping(List<AgencyRouteTimestamp> routeTimestamps) {
-        var busStatesByTripId = routeTimestamps.stream()
+    protected Map<LngLatAlt, Map<LngLatAlt, ShapeProperties>> getStopDelayMapping(List<AgencyRouteTimestamp> routeTimestamps, String feedId) {
+        Map<AgencyTripId, @NotNull List<BusState>> busStatesByTripId = routeTimestamps.stream()
                 .sorted(comparing(AgencyRouteTimestamp::getTimestamp))
                 .flatMap(l -> l.getBusStatesCopyList()
                         .stream())
-                .collect(groupingBy(BusState::getTripId));
+                .collect(groupingBy(s -> new AgencyTripId(s.getTripId(), feedId)));
         Map<AgencyTrip, List<AgencyStopTime>> stopTimesByTripId =
                 agencyStopTimeRepository.findAllByTrip_IdIn(busStatesByTripId.keySet())
                         .stream()
@@ -134,7 +140,7 @@ public class MapperService {
             List<AgencyStopTime> stopTimesForTripId = stopTimesByTripId.getOrDefault(tripId, emptyList());
             stopTimesForTripId.sort(comparing(AgencyStopTime::getStopSeq, naturalOrder()));
             Map<String, Integer> stopIdToSequence = stopTimesForTripId.stream()
-                    .collect(toMap(s->s.getStop().getId(), AgencyStopTime::getStopSeq, (a, b) -> a));
+                    .collect(toMap(s -> s.getStop().getStopId(), AgencyStopTime::getStopSeq, (a, b) -> a));
             for (int busStateIndex = 0; busStateIndex < busStatesForTripId.size() - 1; busStateIndex++) {
                 Integer fromDelay = busStatesForTripId.get(busStateIndex).getDelay();
                 if (fromDelay == null) fromDelay = 0;
@@ -205,6 +211,7 @@ public class MapperService {
         return stopPositions;
     }
 
+    @Transactional(readOnly = true)
     public FeatureCollection getDelayLines(String feedId, MapOptions mapOptions) {
         if (CollectionUtils.isEmpty(mapOptions.getRouteNames()) || StringUtils.isBlank(feedId)) {
             log.error("Failed either due to empty feedId or empty routeName");
@@ -217,7 +224,7 @@ public class MapperService {
         var routeTimestamps = routeTimestampRepository.getRouteTimestampsBy(getMidnightDaysAgo(mapOptions.getSearchPeriod()),
                 getMidnightTonight(),
                 mapOptions.getRouteNames(),
-                feedId).collectList().block();
+                feedId);
 
         var filteredRouteTimestamps = routeTimestamps
                 .stream()
@@ -233,7 +240,7 @@ public class MapperService {
                             sampledHour <= mapOptions.getHourEnded() &&
                             mapOptions.getDaysSelected().contains(sampledDay.getValue());
                 }).toList();
-        var stopDelayMapping = getStopDelayMapping(filteredRouteTimestamps);
+        var stopDelayMapping = getStopDelayMapping(filteredRouteTimestamps, feedId);
         var featureList = getFeatureList(stopDelayMapping);
         return getFeatureCollection(featureList);
     }
@@ -268,7 +275,7 @@ public class MapperService {
                 .stream()
                 .findAny()
                 .map(AgencyShape::getId)
-                .map(ShapePointId::getShapeId)
+                .map(AgencyShapeId::getShapeId)
                 .map(agencyShapeRepository::findAllById_ShapeIdOrderByIdShapeIdAsc)
                 .stream()
                 .flatMap(Collection::stream)

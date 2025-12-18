@@ -4,13 +4,13 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Entity
-@Table(name = "gtfs_stop_time")
+@Table(
+        name = "gtfs_stop_time",
+        schema = "MPT"
+)
 @Getter
 @Setter
 @ToString
@@ -19,25 +19,46 @@ import java.util.Objects;
 @AllArgsConstructor
 public class AgencyStopTime {
 
-    @EmbeddedId
-    private StopTimeId id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private AgencyStopTimeId id;
 
-    @MapsId("tripId")
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "trip_id", referencedColumnName = "id", nullable = false)
+    @JoinColumns({
+            @JoinColumn(name = "trip_id", referencedColumnName = "trip_id", nullable = false, insertable = false, updatable = false),
+            @JoinColumn(name = "agency_id", referencedColumnName = "agency_id", nullable = false, insertable = false, updatable = false)
+    })
     @ToString.Exclude
     private AgencyTrip trip;
 
-    // Foreign key to Stop
+    // --- RELATIONSHIP 2: AgencyStop (Foreign Key is stop_id, agency_id) ---
+    // We need a separate stop_id column for this relationship
+    @Column(name = "stop_id", nullable = false)
+    private String stopId;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "stop_id", referencedColumnName = "id", nullable = false)
+    @JoinColumns({
+            @JoinColumn(name = "stop_id", referencedColumnName = "stop_id", nullable = false, insertable = false, updatable = false),
+            @JoinColumn(name = "agency_id", referencedColumnName = "agency_id", nullable = false, insertable = false, updatable = false)
+    })
     @ToString.Exclude
     private AgencyStop stop;
-    private Integer stopSeq;
+
     @Column
     private Integer arrivalTimeSecs;
     @Column
     private Integer departureTimeSecs;
+
+    @Transient
+    public String getTripId() {
+        if (getId() == null) return null;
+        return getId().getTripId();
+    }
+
+    @Transient
+    public Integer getStopSeq() {
+        return getId() != null ? getId().getStopSequence() : null;
+    }
 
     @Override
     public final boolean equals(Object o) {
@@ -47,16 +68,13 @@ public class AgencyStopTime {
         Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
         AgencyStopTime that = (AgencyStopTime) o;
+        // Use the generated ID for equals comparison
         return getId() != null && Objects.equals(getId(), that.getId());
     }
 
     @Override
     public final int hashCode() {
+        // Use the generated ID for hashing
         return Objects.hash(id);
-    }
-
-    public String getTripId() {
-        if(getId()==null)return null;
-        return getTripId();
     }
 }

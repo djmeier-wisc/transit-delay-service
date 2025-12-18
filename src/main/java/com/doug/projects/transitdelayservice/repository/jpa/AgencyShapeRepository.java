@@ -1,14 +1,13 @@
 package com.doug.projects.transitdelayservice.repository.jpa;
 
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyShape;
-import com.doug.projects.transitdelayservice.entity.jpa.ShapePointId;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyShapeId;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
-import java.util.Optional;
 
-public interface AgencyShapeRepository extends JpaRepository<AgencyShape, ShapePointId> {
+public interface AgencyShapeRepository extends JpaRepository<AgencyShape, AgencyShapeId> {
     List<AgencyShape> findAllById_ShapeId(String idShapeId);
 
     List<AgencyShape> findAllById_ShapeIdOrderByIdShapeIdAsc(String idShapeId);

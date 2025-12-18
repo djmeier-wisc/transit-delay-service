@@ -1,9 +1,9 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponseResponse;
-import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
+import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyFeedRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +27,7 @@ public class GtfsRetryOnFailureService {
     private final GtfsRealtimeParserService realtimeParserService;
     private final AgencyFeedRepository agencyFeedRepository;
 
-    public List<AgencyRouteTimestamp> pollStaticFeedIfNeeded(AgencyRealtimeAnalysisResponseResponse realtimeResponse) {
+    public List<AgencyRouteTimestamp> pollStaticFeedIfNeeded(AgencyRealtimeAnalysisResponse realtimeResponse) {
         Status feedStatus = realtimeResponse.getFeedStatus();
         AgencyFeedDto feed = realtimeResponse.getFeed();
         recheckFeedByStatus(feedStatus, feed);
@@ -37,7 +37,7 @@ public class GtfsRetryOnFailureService {
         return realtimeResponse.getRouteTimestamps();
     }
 
-    public List<AgencyRouteTimestamp> updateFeedStatus(AgencyRealtimeAnalysisResponseResponse realtimeResponse) {
+    public List<AgencyRouteTimestamp> updateFeedStatus(AgencyRealtimeAnalysisResponse realtimeResponse) {
         Status feedStatus = realtimeResponse.getFeedStatus();
         AgencyFeedDto feed = realtimeResponse.getFeed();
         updateFeedToStatus(feed, feedStatus);

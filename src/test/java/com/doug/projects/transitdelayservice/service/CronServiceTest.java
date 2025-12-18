@@ -1,8 +1,8 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponseResponse;
-import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
+import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,15 +10,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.Status.*;
+import static com.doug.projects.transitdelayservice.entity.dynamodb.Status.ACTIVE;
 import static org.mockito.Mockito.*;
 
 
@@ -49,9 +46,9 @@ class CronServiceTest {
         return "1";
     }
 
-    private static AgencyRealtimeAnalysisResponseResponse getResponse() {
+    private static AgencyRealtimeAnalysisResponse getResponse() {
         List<AgencyRouteTimestamp> routeTimestamps = List.of(new AgencyRouteTimestamp());
-        return AgencyRealtimeAnalysisResponseResponse.builder().feed(getAgencyFeedActive()).routeTimestamps(routeTimestamps).build();
+        return AgencyRealtimeAnalysisResponse.builder().feed(getAgencyFeedActive()).routeTimestamps(routeTimestamps).build();
     }
 
     @BeforeEach
@@ -64,7 +61,6 @@ class CronServiceTest {
         ReflectionTestUtils.setField(cronService, "doesAgencyCronRun", true);
         when(gtfsFeedAggregator.gatherRTFeeds()).thenReturn(getAgencyFeedList());
         cronService.writeFeeds();
-        verify(agencyFeedService, times(1)).deleteAll();
         verify(agencyFeedService).saveAll(eq(getAgencyFeedList()));
     }
 
@@ -79,8 +75,7 @@ class CronServiceTest {
         cronService.writeGtfsRealtimeData();
         verify(agencyFeedService, times(1)).getAllAgencyFeeds();
         verify(rtResponseService, times(1)).pollFeed(eq(getAgencyFeedActive()), anyInt());
-        verify(retryOnFailureService, times(1)).updateFeedStatus(any());
-        verify(routeTimestampRepository, times(1)).saveAll(eq(List.of(new AgencyRouteTimestamp())));
+        verify(routeTimestampRepository, times(1)).saveAll(eq(List.of(new AgencyRouteTimestamp())), anyString());
     }
 
     @Test

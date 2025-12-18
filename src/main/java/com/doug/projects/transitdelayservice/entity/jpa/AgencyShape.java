@@ -1,13 +1,16 @@
 package com.doug.projects.transitdelayservice.entity.jpa;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.EmbeddedId;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
 import java.util.Objects;
 
 @Entity
-@Table(name = "gtfs_shape_point")
+@Table(name = "gtfs_shape_point", schema = "MPT")
 @Getter
 @Setter
 @ToString
@@ -17,7 +20,7 @@ import java.util.Objects;
 public class AgencyShape {
 
     @EmbeddedId
-    private ShapePointId id;
+    private AgencyShapeId id;
 
     // Renamed fields for clarity (to match GTFS shape_pt_lat/lon)
     @Column(name = "shape_pt_lat")
@@ -25,11 +28,6 @@ public class AgencyShape {
 
     @Column(name = "shape_pt_lon")
     private Double shapePtLon;
-
-    @ToString.Exclude
-    @ManyToOne(cascade = CascadeType.ALL)
-    @JoinColumn(name = "agency_trip_id")
-    private AgencyTrip agencyTrip;
 
     @Override
     public final boolean equals(Object o) {

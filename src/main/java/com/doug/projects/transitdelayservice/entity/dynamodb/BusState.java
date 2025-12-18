@@ -1,14 +1,14 @@
 package com.doug.projects.transitdelayservice.entity.dynamodb;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 @NoArgsConstructor
 @Getter
 @Setter
+@Builder
+@AllArgsConstructor
 public class BusState {
     private Integer delay;
     private String closestStopId;

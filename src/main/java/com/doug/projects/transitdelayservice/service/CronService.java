@@ -1,37 +1,29 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeed;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
-import com.doug.projects.transitdelayservice.repository.jpa.AgencyFeedRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CronService {
-    private final AgencyFeedRepository agencyFeedRepository;
     private final GtfsFeedAggregator gtfsFeedAggregator;
     private final GtfsRealtimeParserService rtResponseService;
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsRetryOnFailureService retryOnFailureService;
-    @Qualifier("retry")
-    private final Executor retryExecutor;
-    @Qualifier("dynamoWriting")
-    private final Executor dynamoExecutor;
     private final AgencyFeedService agencyFeedService;
+    private final GtfsStaticParserService gtfsStaticParserService;
     @Value("${doesAgencyCronRun}")
     private Boolean doesAgencyCronRun;
     @Value("${doesRealtimeCronRun}")
@@ -47,7 +39,6 @@ public class CronService {
             List<AgencyFeedDto> newFeeds = gtfsFeedAggregator.gatherRTFeeds();
             log.info("Gathered Feeds. Writing feeds to table...");
             populateTimezoneFromOldFeeds(newFeeds);
-            agencyFeedService.deleteAll();
             agencyFeedService.saveAll(newFeeds);
             log.info("Wrote {} feeds successfully.", newFeeds.size());
         } catch (Exception e) {
@@ -83,8 +74,19 @@ public class CronService {
             List<AgencyRouteTimestamp> routeTimestamps = rtResp != null && rtResp.getRouteTimestamps() != null ?
                     rtResp.getRouteTimestamps() :
                     Collections.emptyList();
-            routeTimestampRepository.saveAll(routeTimestamps);
+            routeTimestampRepository.saveAll(routeTimestamps, feed.getId());
         }
         log.info("Finished realtime data write");
+    }
+
+    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
+    public void writeGTFSStaticData() {
+        for (AgencyFeedDto feed : agencyFeedService.getAllAgencyFeeds()) {
+            var staticResult = gtfsStaticParserService.writeGtfsRoutesToDiskAsync(feed, 240).join();
+            if (!staticResult.isSuccess()) {
+                log.error("Retried reading static feed, but failed. Marking feed as unavailable");
+            }
+            gtfsStaticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
+        }
     }
 }

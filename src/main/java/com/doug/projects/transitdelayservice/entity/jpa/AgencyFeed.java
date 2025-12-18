@@ -2,7 +2,10 @@ package com.doug.projects.transitdelayservice.entity.jpa;
 
 import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import org.hibernate.proxy.HibernateProxy;
 
 import java.util.Objects;
@@ -17,6 +20,7 @@ import java.util.Objects;
 })
 public class AgencyFeed {
     @Id
+    @Column(name = "agency_id")
     private String id;
     @Enumerated
     @Column(length = 10)

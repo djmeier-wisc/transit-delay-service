@@ -1,8 +1,8 @@
 package com.doug.projects.transitdelayservice.entity;
 
-import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Data;
@@ -12,7 +12,7 @@ import java.util.List;
 
 @Data
 @Builder
-public class AgencyRealtimeAnalysisResponseResponse {
+public class AgencyRealtimeAnalysisResponse {
     @Nullable
     private List<AgencyRouteTimestamp> routeTimestamps;
     @NotNull

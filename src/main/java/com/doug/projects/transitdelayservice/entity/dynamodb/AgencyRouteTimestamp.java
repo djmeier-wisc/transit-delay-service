@@ -2,14 +2,10 @@ package com.doug.projects.transitdelayservice.entity.dynamodb;
 
 import lombok.*;
 import org.apache.commons.lang3.StringUtils;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-@DynamoDbBean
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -22,26 +18,11 @@ public class AgencyRouteTimestamp {
     /**
      * The timestamp, gathered from GTFS realtime feed. DO NOT USE SYSTEM TIMESTAMP to avoid duplication
      */
-    @Getter(AccessLevel.NONE)
     private Long timestamp;
     /**
      * The list of routes, in the format of <code>BusStates</code> toString method. delay%closestStopId%tripId
      */
     private List<String> busStatesList;
-
-    @DynamoDbPartitionKey
-    public String getAgencyRoute() {
-        return agencyRoute;
-    }
-
-    @DynamoDbSortKey
-    public Long getTimestamp() {
-        return timestamp;
-    }
-
-    public String getAgencyId() {
-        return agencyRoute.split(":")[0];
-    }
 
     public String getRouteName() {
         return agencyRoute.split(":")[1];

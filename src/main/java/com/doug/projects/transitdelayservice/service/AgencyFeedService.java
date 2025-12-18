@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +20,7 @@ public class AgencyFeedService {
     public List<AgencyFeedDto> getAllAgencyFeeds() {
         return agencyFeedRepository.findAll().stream()
                 .map(AgencyFeedService::mapAgencyFeedDto)
+                .sorted(Comparator.comparing(AgencyFeedDto::getId))
                 .toList();
     }
 

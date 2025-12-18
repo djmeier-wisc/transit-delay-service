@@ -2,6 +2,7 @@ package com.doug.projects.transitdelayservice.entity.jpa;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,9 +15,13 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ShapePointId implements Serializable {
-    @Column(name = "shape_id")
-    private String shapeId;
-    @Column(name = "shape_sequence")
-    private Integer sequence;
+public class AgencyTripDelayId implements Serializable {
+    @Column(name = "trip_id")
+    @NotNull
+    private String tripId;
+    @Column(name = "timestamp")
+    @NotNull
+    private Long timestamp;
+    @Column(name = "agency_id")
+    private String agencyId;
 }

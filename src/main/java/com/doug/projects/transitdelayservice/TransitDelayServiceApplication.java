@@ -10,8 +10,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -29,16 +27,6 @@ public class TransitDelayServiceApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(TransitDelayServiceApplication.class, args);
-    }
-
-    @Bean
-    public DynamoDbEnhancedClient provideDynamoDb() {
-        return DynamoDbEnhancedClient.create();
-    }
-
-    @Bean
-    public DynamoDbEnhancedAsyncClient provideAsyncEnhancedClient() {
-        return DynamoDbEnhancedAsyncClient.create();
     }
 
     @Bean

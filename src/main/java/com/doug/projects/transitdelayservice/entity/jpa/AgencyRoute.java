@@ -4,13 +4,11 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 @Entity
-@Table(name = "GTFS_ROUTE", schema = "MPT")
+@Table(name = "gtfs_route", schema = "MPT")
 @Getter
 @Setter
 @ToString
@@ -18,14 +16,12 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgencyRoute {
+    @EmbeddedId
+    private AgencyRouteId id;
 
-    // Primary key: The route_id
-    @Id
-    private String id;
 
-    // Foreign key to Agency
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agency_id", referencedColumnName = "id", nullable = false)
+    @JoinColumn(name = "agency_id", referencedColumnName = "agency_id", nullable = false, insertable = false, updatable = false)
     @ToString.Exclude
     private AgencyFeed agency;
 
@@ -34,7 +30,7 @@ public class AgencyRoute {
     private Integer routeSortOrder;
 
     @ToString.Exclude
-    @OneToMany(mappedBy = "route", orphanRemoval = true)
+    @OneToMany(mappedBy = "route")
     private List<AgencyTrip> agencyTrips;
 
     @Override
@@ -51,5 +47,10 @@ public class AgencyRoute {
     @Override
     public final int hashCode() {
         return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+    }
+
+    public String getRouteId() {
+        if (getId() == null) return null;
+        return getId().getRouteId();
     }
 }
