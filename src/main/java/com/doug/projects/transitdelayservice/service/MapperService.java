@@ -8,6 +8,7 @@ import com.doug.projects.transitdelayservice.entity.jpa.*;
 import com.doug.projects.transitdelayservice.entity.transit.ShapeProperties;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import com.doug.projects.transitdelayservice.repository.GtfsStaticService;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyShapePointRepository;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyShapeRepository;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyStopTimeRepository;
 import io.micrometer.common.util.StringUtils;
@@ -43,8 +44,9 @@ public class MapperService {
     private final AgencyRouteTimestampRepository routeTimestampRepository;
     private final GtfsStaticService staticRepo;
     private final AgencyFeedService agencyFeedService;
-    private final AgencyShapeRepository agencyShapeRepository;
+    private final AgencyShapePointRepository agencyShapePointRepository;
     private final AgencyStopTimeRepository agencyStopTimeRepository;
+    private final AgencyShapeRepository agencyShapeRepository;
 
     public static List<LngLatAlt> divideShape(List<LngLatAlt> lngLatAlts, LngLatAlt from, LngLatAlt to) {
 
@@ -163,7 +165,7 @@ public class MapperService {
                     var currDelayAndShape = delayMapping
                             .computeIfAbsent(fromStop, k -> new HashMap<>()) //build new HashMap if none are present for "from"
                             .computeIfAbsent(toStop, k -> ShapeProperties.builder()
-                                    .shapeId(tripId.getShapePoints().stream().map(s->new LngLatAlt(s.getShapePtLon(),s.getShapePtLat())).toList())
+                                    .shapeId(tripId.getAgencyShapePoints().stream().map(s -> new LngLatAlt(s.getShapePtLon(), s.getShapePtLat())).toList())
                                     .delay(currDelay)
                                     .count(0)
                                     .build());
@@ -268,15 +270,13 @@ public class MapperService {
     }
 
     public GtfsShape getRandomGtfsShape(String feedId) {
-        long count = agencyShapeRepository.countByAgencyTripRouteAgency_Id(feedId);
+        long count = agencyShapeRepository.countById_AgencyId(feedId);
         if (count == 0) return new GtfsShape();
         int selected = (int) (Math.random() * count);
-        var points = agencyShapeRepository.findAllByAgencyTripRouteAgency_Id(feedId, PageRequest.of(selected,1))
+        var points = agencyShapeRepository.findAllById_AgencyId(feedId, PageRequest.of(selected, 1))
                 .stream()
                 .findAny()
-                .map(AgencyShape::getId)
-                .map(AgencyShapeId::getShapeId)
-                .map(agencyShapeRepository::findAllById_ShapeIdOrderByIdShapeIdAsc)
+                .map(AgencyShape::getAgencyShapePoints)
                 .stream()
                 .flatMap(Collection::stream)
                 .map(s->List.of(s.getShapePtLat(),s.getShapePtLon()))

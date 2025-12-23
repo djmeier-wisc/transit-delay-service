@@ -8,43 +8,41 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
-
-    # New environment variables to connect to the 'db' service
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-
-    # Ensure the app waits for the DB to be healthy before starting
     depends_on:
       db:
         condition: service_healthy
 
-
   db:
     image: postgres:18.1
     restart: unless-stopped
-
-
     ports:
       - "5432:5432"
-
-
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
-
     volumes:
       - pg_data:/var/lib/postgresql/18/docker
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # Cloudflare Tunnel Service
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TOKEN}
+    depends_on:
+      - transit-delay-service
 
 volumes:
   pg_data:

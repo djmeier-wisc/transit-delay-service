@@ -9,7 +9,6 @@ import com.doug.projects.transitdelayservice.repository.jpa.AgencyTripDelayRepos
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -70,42 +69,15 @@ public class AgencyRouteTimestampRepository {
                 log.error("Failed to save w/ e", e);
             }
         }
-//        agencyTripDelayRepository.saveAll(entities);
         log.info("Saving {} tripDelays", entities.size());
     }
 
-    @Transactional(readOnly = true)
     public List<AgencyRouteTimestamp> getRouteTimestampsBy(long startTime, long endTime, List<String> routeNames, String feedId) {
 
         var delayByRouteName = agencyTripDelayRepository.findDelayRecordsForRoutesAndTimeRange(feedId, routeNames, startTime, endTime)
                 .stream()
                 .collect(Collectors.groupingBy(s -> s.getTrip().getRoute().getRouteName(),
                         Collectors.groupingBy(AgencyTripDelay::getTimestamp)));
-        List<AgencyRouteTimestamp> routeTimestamps = new ArrayList<>();
-        delayByRouteName.forEach((name, map) -> {
-            map.forEach((timestamp, delays) -> {
-                var routeTimestamp = new AgencyRouteTimestamp();
-                routeTimestamp.setTimestamp(timestamp);
-                routeTimestamp.setAgencyRoute(feedId, name);
-                var busStates = delays.stream()
-                        .map(delay -> BusState.builder()
-                                .delay(delay.getDelaySeconds())
-                                .closestStopId(delay.getAgencyStop().getStopId())
-                                .tripId(delay.getTrip().getTripId())
-                                .build())
-                        .toList();
-                routeTimestamp.setBusStates(busStates);
-                routeTimestamps.add(routeTimestamp);
-            });
-        });
-        return routeTimestamps;
-    }
-
-    public List<AgencyRouteTimestamp> getRouteTimestampsBy(long startTime, long endTime, String routeName, String feedId) {
-        var delayByRouteName = agencyTripDelayRepository.findDelayRecordsForRoutesAndTimeRange(feedId, List.of(routeName), startTime, endTime)
-                .stream()
-                .collect(Collectors.groupingBy(s -> s.getTrip().getRoute().getRouteName(),
-                        Collectors.groupingBy(s -> s.getTimestamp())));
         List<AgencyRouteTimestamp> routeTimestamps = new ArrayList<>();
         delayByRouteName.forEach((name, map) -> {
             map.forEach((timestamp, delays) -> {

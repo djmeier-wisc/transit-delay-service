@@ -32,8 +32,8 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 server:
   port: 8080
-doesAgencyCronRun: false
-doesRealtimeCronRun: false
+doesAgencyCronRun: true
+doesRealtimeCronRun: true
 logging:
   level:
     org.hibernate.persister.entity.AbstractEntityPersister: ERROR

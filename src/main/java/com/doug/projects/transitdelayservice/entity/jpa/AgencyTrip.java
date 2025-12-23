@@ -4,8 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
-import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 @Entity
 @Table(name = "gtfs_trip", schema = "MPT")
@@ -46,40 +46,13 @@ public class AgencyTrip {
     @ToString.Exclude
     private AgencyRoute route;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "agency_trip_shape",
-            joinColumns = {
-                    @JoinColumn(
-                            name = "trip_id",
-                            referencedColumnName = "trip_id",
-                            insertable = false,
-                            updatable = false
-                    ),
-                    @JoinColumn(
-                            name = "agency_id",
-                            referencedColumnName = "agency_id",
-                            insertable = false,
-                            updatable = false
-                    )
-            },
-            inverseJoinColumns = {
-                    @JoinColumn(
-                            name = "shape_id",
-                            referencedColumnName = "shape_id",
-                            insertable = false,
-                            updatable = false
-                    ),
-                    @JoinColumn(
-                            name = "agency_id",
-                            referencedColumnName = "agency_id",
-                            insertable = false,
-                            updatable = false
-                    )
-            }
-    )
     @ToString.Exclude
-    private List<AgencyShape> shapePoints;
+    @ManyToOne
+    @JoinColumns({
+            @JoinColumn(name = "agency_id", referencedColumnName = "agency_id", updatable = false, insertable = false),
+            @JoinColumn(name = "shape_id", referencedColumnName = "shape_id", updatable = false, insertable = false)
+    })
+    private AgencyShape agencyShape;
 
     @Override
     public final boolean equals(Object o) {
@@ -107,5 +80,9 @@ public class AgencyTrip {
 
     public String getTripId() {
         return id != null ? id.getTripId() : null;
+    }
+
+    public Set<AgencyShapePoint> getAgencyShapePoints() {
+        return getAgencyShape() != null ? getAgencyShape().getAgencyShapePoints() : null;
     }
 }

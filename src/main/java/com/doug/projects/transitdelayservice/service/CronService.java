@@ -79,7 +79,7 @@ public class CronService {
         log.info("Finished realtime data write");
     }
 
-    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
+    //    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.DAYS)
     public void writeGTFSStaticData() {
         for (AgencyFeedDto feed : agencyFeedService.getAllAgencyFeeds()) {
             var staticResult = gtfsStaticParserService.writeGtfsRoutesToDiskAsync(feed, 240).join();

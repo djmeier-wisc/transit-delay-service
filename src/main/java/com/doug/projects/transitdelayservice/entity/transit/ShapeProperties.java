@@ -1,8 +1,6 @@
 package com.doug.projects.transitdelayservice.entity.transit;
 
-import com.doug.projects.transitdelayservice.entity.jpa.AgencyShape;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Builder;
 import lombok.Data;
 import org.geojson.LngLatAlt;

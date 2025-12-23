@@ -13,6 +13,7 @@ public interface AgencyTripDelayRepository extends JpaRepository<AgencyTripDelay
             SELECT adr FROM AgencyTripDelay adr \
             JOIN FETCH adr.trip t \
             JOIN FETCH t.route r \
+            JOIN FETCH adr.agencyStop \
             JOIN r.agency a \
             WHERE a.id = :agencyId \
             AND r.routeName IN :routeNames \

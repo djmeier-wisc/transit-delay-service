@@ -37,9 +37,10 @@ public class GtfsStaticParserService {
     private final AgencyFeedRepository agencyFeedRepository;
     private final AgencyRouteRepository agencyRouteRepository;
     private final AgencyTripRepository agencyTripRepository;
-    private final AgencyShapeRepository agencyShapeRepository;
+    private final AgencyShapePointRepository agencyShapePointRepository;
     private final AgencyStopRepository agencyStopRepository;
     private final AgencyStopTimeRepository agencyStopTimeRepository;
+    private final AgencyShapeRepository agencyShapeRepository;
 
     /**
      * Gets the associated type with this filename by checking whether the filename ENDS with type.getFileName.
@@ -234,11 +235,11 @@ public class GtfsStaticParserService {
                 .with(schema)
                 .with(CsvParser.Feature.TRIM_SPACES)
                 .readValues(file)) {
-            List<AgencyShape> shapes = new ArrayList<>();
+            List<AgencyShapePoint> shapes = new ArrayList<>();
             while (attributesIterator.hasNext()) {
                 ShapeAttributes shapeAttrs = attributesIterator.next();
-                var entity = AgencyShape.builder()
-                        .id(AgencyShapeId.builder()
+                var entity = AgencyShapePoint.builder()
+                        .id(AgencyShapePointId.builder()
                                 .shapeId(shapeAttrs.getShapeId())
                                 .sequence(shapeAttrs.getShapePtSequence())
                                 .agencyId(agencyId)
@@ -248,15 +249,15 @@ public class GtfsStaticParserService {
                         .build();
                 shapes.add(entity);
                 if(shapes.size() >= 50) {
-                    agencyShapeRepository.saveAll(shapes);
+                    agencyShapePointRepository.saveAll(shapes);
                     shapes.clear();
                 }
             }
-            agencyShapeRepository.saveAll(shapes);
+            agencyShapePointRepository.saveAll(shapes);
         } catch (IOException e) {
             log.error("Failed to read {} shapes", agencyId);
         }
-        agencyShapeRepository.flush();
+        agencyShapePointRepository.flush();
         file.delete();
     }
 
@@ -266,6 +267,7 @@ public class GtfsStaticParserService {
         Map<String, AgencyTrip> shapeMap = new HashMap<>();
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        List<AgencyShape> shapes = new ArrayList<>();
         try (MappingIterator<TripAttributes> attributesIterator = csvMapper
                 .readerWithSchemaFor(TripAttributes.class)
                 .with(schema)
@@ -278,10 +280,19 @@ public class GtfsStaticParserService {
                         .routeId(tripsAttributes.getRouteId())
                         .shapeId(tripsAttributes.getShapeId())
                         .build();
+                var shapeEntity = AgencyShape.builder()
+                        .id(AgencyShapeId.builder()
+                                .agencyId(agencyId)
+                                .shapeId(tripsAttributes.getShapeId())
+                                .build())
+                        .tripId(tripsAttributes.getTripId())
+                        .build();
                 tripMap.putIfAbsent(entity.getTripId(), entity);
                 shapeMap.putIfAbsent(tripsAttributes.getShapeId(), entity);
+                shapes.add(shapeEntity);
             }
-            agencyTripRepository.saveAll(tripMap.values());
+            agencyShapeRepository.saveAllAndFlush(shapes);
+            agencyTripRepository.saveAllAndFlush(tripMap.values());
         } catch (IOException e) {
             log.error("Failed to read {} trips", agencyId);
         }
