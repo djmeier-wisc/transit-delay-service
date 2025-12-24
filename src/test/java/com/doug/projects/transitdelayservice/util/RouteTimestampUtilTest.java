@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.util;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.BusState;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;

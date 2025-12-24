@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import jakarta.transaction.Transactional;
@@ -86,7 +86,7 @@ public class CronService {
             if (!staticResult.isSuccess()) {
                 log.error("Retried reading static feed, but failed. Marking feed as unavailable");
             }
-            gtfsStaticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
+            gtfsStaticParserService.writeGtfsStaticDataToDbFromDiskSync(feed);
         }
     }
 }

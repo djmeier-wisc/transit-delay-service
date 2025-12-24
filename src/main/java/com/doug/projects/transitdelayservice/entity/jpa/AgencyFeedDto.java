@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.entity.jpa;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.Status;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.Objects;
 
 /**
  * DTO for {@link AgencyFeed}

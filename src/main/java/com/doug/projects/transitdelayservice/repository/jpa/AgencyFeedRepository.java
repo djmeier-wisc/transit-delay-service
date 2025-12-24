@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.repository.jpa;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.Status;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeed;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;

@@ -1,9 +1,9 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
-import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.BusState;
+import com.doug.projects.transitdelayservice.entity.Status;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyRouteId;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyTripId;

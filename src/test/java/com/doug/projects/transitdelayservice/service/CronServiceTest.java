@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.Status.ACTIVE;
+import static com.doug.projects.transitdelayservice.entity.Status.ACTIVE;
 import static org.mockito.Mockito.*;
 
 

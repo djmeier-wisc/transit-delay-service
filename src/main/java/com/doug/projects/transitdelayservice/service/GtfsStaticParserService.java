@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.AgencyStaticStatus;
-import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticDataType;
+import com.doug.projects.transitdelayservice.entity.GtfsStaticDataType;
 import com.doug.projects.transitdelayservice.entity.gtfs.csv.*;
 import com.doug.projects.transitdelayservice.entity.jpa.*;
 import com.doug.projects.transitdelayservice.repository.jpa.*;
@@ -25,7 +25,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticDataType.*;
+import static com.doug.projects.transitdelayservice.entity.GtfsStaticDataType.*;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
 import static io.micrometer.common.util.StringUtils.isBlank;
 
@@ -115,7 +115,7 @@ public class GtfsStaticParserService {
         }
     }
 
-    public void writeGtfsStaticDataToDynamoFromDiskSync(AgencyFeedDto feed) {
+    public void writeGtfsStaticDataToDbFromDiskSync(AgencyFeedDto feed) {
         var agencyId = feed.getId();
         var agency = agencyFeedRepository.findById(agencyId);
         if (agency.isEmpty()) {

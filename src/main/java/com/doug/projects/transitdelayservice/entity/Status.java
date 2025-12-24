@@ -1,4 +1,4 @@
-package com.doug.projects.transitdelayservice.entity.dynamodb;
+package com.doug.projects.transitdelayservice.entity;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 

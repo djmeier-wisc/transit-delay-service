@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.entity.jpa;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.Status;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

@@ -6,7 +6,7 @@ The frontend is available at https://my-precious-time.com/
 This service:
 
 - Gathers GTFS feeds from [the Mobility Database](https://mobilitydatabase.org/)
-- Formats and stores the [GTFS schedule data](https://gtfs.org/documentation/schedule/reference/) in DynamoDB
+- Formats and stores the [GTFS schedule data](https://gtfs.org/documentation/schedule/reference/) in Postgres
   - For STOP_TIMES, [data is often omitted between time points](https://gtfs.org/documentation/schedule/reference/#stop_timestxt). I chose to linearly interpolate between these points when polling this data
 - Gathers and stores the current [realtime data](https://www.google.com/search?q=gtfs+realtime+reference&ie=UTF-8) from agencies
   - This often involves polling static reference data, to compare expected/actual arrival times
@@ -18,7 +18,7 @@ This service:
 
 ### Tools Used
 
-- DynamoDB to store GTFS static/realtime data 
+- Postgres to store GTFS static/realtime data
 - Spring Webflux - this is used to handle both endpoints, and to avoid loading all of the GTFS schedule reference into memory
 - ChartJS Line Charts
 - GeoJSON
@@ -32,7 +32,22 @@ This service:
 
 ### Running our service
 
-- Please reach out for DynamoDB access to our tables. I'd be happy to set you up with access.
+- after setting up a .env file, you can run the project
+
+```env
+# .env file
+# PostgreSQL Settings
+POSTGRES_DB=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+
+# Cloudflare Tunnel Settings
+CLOUDFLARE_TOKEN=
+```
+
+```shell
+docker compose up --build
+```
 
 ### Usage
 

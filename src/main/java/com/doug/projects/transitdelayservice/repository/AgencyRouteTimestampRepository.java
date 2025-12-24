@@ -1,7 +1,7 @@
 package com.doug.projects.transitdelayservice.repository;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.BusState;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyStopId;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyTripDelay;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyStopRepository;
@@ -24,10 +24,10 @@ public class AgencyRouteTimestampRepository {
     private final AgencyTripDelayRepository agencyTripDelayRepository;
 
     /**
-     * Writes all items in data to table synchronously. Chunked to Dynamo's 25 item maximum.
+     * Writes all items in data to table synchronously.
      *
      * @param data the data to save
-     * @param id
+     * @param agencyId
      */
     public void saveAll(List<AgencyRouteTimestamp> data, String agencyId) {
         var stopIds = data.stream()

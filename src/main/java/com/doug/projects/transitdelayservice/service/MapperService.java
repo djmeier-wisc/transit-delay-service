@@ -1,9 +1,9 @@
 package com.doug.projects.transitdelayservice.service;
 
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.BusState;
 import com.doug.projects.transitdelayservice.entity.GtfsShape;
 import com.doug.projects.transitdelayservice.entity.MapOptions;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
 import com.doug.projects.transitdelayservice.entity.jpa.*;
 import com.doug.projects.transitdelayservice.entity.transit.ShapeProperties;
 import com.doug.projects.transitdelayservice.repository.AgencyRouteTimestampRepository;

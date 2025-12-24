@@ -1,7 +1,5 @@
 package com.doug.projects.transitdelayservice.entity;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;

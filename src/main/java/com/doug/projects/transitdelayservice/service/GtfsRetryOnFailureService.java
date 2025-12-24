@@ -1,8 +1,8 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.Status;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.Status;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyFeedRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +13,7 @@ import org.springframework.util.CollectionUtils;
 import java.util.Collections;
 import java.util.List;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.Status.*;
+import static com.doug.projects.transitdelayservice.entity.Status.*;
 
 /**
  * Used in the event of a failure when reading static data or realtime data.
@@ -65,9 +65,7 @@ public class GtfsRetryOnFailureService {
     private void recheckFeedByStatus(Status feedStatus, AgencyFeedDto feed) {
         switch (feedStatus) {
             case ACTIVE -> {
-                if (!feed.getStatus().equals(ACTIVE.toString())) {
-                    updateFeedToStatus(feed, ACTIVE);
-                }
+                updateFeedToStatus(feed, ACTIVE);
             }
             case UNAUTHORIZED, DELETED -> {
                 updateFeedToStatus(feed, feedStatus);
@@ -78,18 +76,18 @@ public class GtfsRetryOnFailureService {
                     log.error("Retried reading static feed, but failed. Marking feed as unavailable");
                     updateFeedToStatus(feed, UNAVAILABLE);
                 }
-                staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
+                staticParserService.writeGtfsStaticDataToDbFromDiskSync(feed);
                 sleepFor(5);
                 var realtimeResult = realtimeParserService.pollFeed(feed);
-                if (realtimeResult.getFeedStatus() != Status.ACTIVE) {
-                    log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
+                if (realtimeResult.getFeedStatus() != ACTIVE) {
+                    log.error("Retried reading realtime feed, but was unable to find associated staticData in db");
                     updateFeedToStatus(feed, realtimeResult.getFeedStatus());
                 }
             }
             case TIMEOUT, UNAVAILABLE -> {
                 sleepFor(5);
                 var realtimeResult = realtimeParserService.pollFeed(feed);
-                if (realtimeResult.getFeedStatus() != Status.ACTIVE) {
+                if (realtimeResult.getFeedStatus() != ACTIVE) {
                     log.error("TIMEOUT - marking feed as unavailable");
                     updateFeedToStatus(feed, TIMEOUT);
                 }
