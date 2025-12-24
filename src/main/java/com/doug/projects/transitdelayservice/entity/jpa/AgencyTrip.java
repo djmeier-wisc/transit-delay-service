@@ -4,8 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 @Entity
 @Table(name = "gtfs_trip", schema = "MPT")
@@ -82,7 +82,7 @@ public class AgencyTrip {
         return id != null ? id.getTripId() : null;
     }
 
-    public Set<AgencyShapePoint> getAgencyShapePoints() {
+    public List<AgencyShapePoint> getAgencyShapePoints() {
         return getAgencyShape() != null ? getAgencyShape().getAgencyShapePoints() : null;
     }
 }

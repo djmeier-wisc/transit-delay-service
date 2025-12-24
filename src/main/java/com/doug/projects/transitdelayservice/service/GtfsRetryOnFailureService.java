@@ -80,7 +80,7 @@ public class GtfsRetryOnFailureService {
                 }
                 staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
                 sleepFor(5);
-                var realtimeResult = realtimeParserService.pollFeed(feed, 240);
+                var realtimeResult = realtimeParserService.pollFeed(feed);
                 if (realtimeResult.getFeedStatus() != Status.ACTIVE) {
                     log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
                     updateFeedToStatus(feed, realtimeResult.getFeedStatus());
@@ -88,7 +88,7 @@ public class GtfsRetryOnFailureService {
             }
             case TIMEOUT, UNAVAILABLE -> {
                 sleepFor(5);
-                var realtimeResult = realtimeParserService.pollFeed(feed, 240);
+                var realtimeResult = realtimeParserService.pollFeed(feed);
                 if (realtimeResult.getFeedStatus() != Status.ACTIVE) {
                     log.error("TIMEOUT - marking feed as unavailable");
                     updateFeedToStatus(feed, TIMEOUT);

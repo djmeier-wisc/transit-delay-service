@@ -87,8 +87,8 @@ public class AgencyRouteTimestampRepository {
                 var busStates = delays.stream()
                         .map(delay -> BusState.builder()
                                 .delay(delay.getDelaySeconds())
-                                .closestStopId(delay.getAgencyStop().getStopId())
-                                .tripId(delay.getTrip().getTripId())
+                                .closestStopId(delay.getStopId())
+                                .tripId(delay.getTripId())
                                 .build())
                         .toList();
                 routeTimestamp.setBusStates(busStates);

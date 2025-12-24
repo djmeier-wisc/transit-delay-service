@@ -1,16 +1,13 @@
 package com.doug.projects.transitdelayservice.config;
 
+import jakarta.servlet.Filter;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.web.server.ServerWebExchange;
-import org.springframework.web.server.WebFilter;
-import org.springframework.web.server.WebFilterChain;
-import reactor.core.publisher.Mono;
+
+import java.util.Arrays;
 
 @Configuration
 public class CorsConfiguration {
@@ -23,27 +20,33 @@ public class CorsConfiguration {
     private static final String MAX_AGE = "3600";
 
     @Bean
-    public WebFilter corsFilter() {
-        return (ServerWebExchange ctx, WebFilterChain chain) -> {
-            ServerHttpRequest request = ctx.getRequest();
-            ServerHttpResponse response = ctx.getResponse();
-            HttpHeaders headers = response.getHeaders();
-            for (var configuredOrigin : ALLOWED_ORIGIN) {
-                String requestOrigin = request.getHeaders().getOrigin();
-                if (requestOrigin != null && requestOrigin.contains(configuredOrigin)) {
-                    headers.add("Access-Control-Allow-Origin", requestOrigin);
-                    headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
-                    headers.add("Access-Control-Max-Age", MAX_AGE);
-                    headers.add("Access-Control-Allow-Headers", ALLOWED_HEADERS);
-                }
+    public Filter corsFilter() {
+        return (req, res, chain) -> {
+
+            HttpServletRequest request = (HttpServletRequest) req;
+            HttpServletResponse response = (HttpServletResponse) res;
+
+            String requestOrigin = request.getHeader("Origin");
+
+            // Your logic: Check if origin matches any in the ALLOWED_ORIGIN list
+            if (requestOrigin != null && isAllowed(requestOrigin)) {
+                response.setHeader("Access-Control-Allow-Origin", requestOrigin);
+                response.setHeader("Access-Control-Allow-Methods", ALLOWED_METHODS);
+                response.setHeader("Access-Control-Max-Age", MAX_AGE);
+                response.setHeader("Access-Control-Allow-Headers", ALLOWED_HEADERS);
             }
 
-            if (request.getMethod() == HttpMethod.OPTIONS) {
-                response.setStatusCode(HttpStatus.OK);
-                return Mono.empty();
+            // Handle Preflight
+            if (HttpMethod.OPTIONS.name().equalsIgnoreCase(request.getMethod())) {
+                response.setStatus(HttpServletResponse.SC_OK);
+                return;
             }
-            return chain.filter(ctx);
+
+            chain.doFilter(req, res);
         };
     }
 
+    private boolean isAllowed(String origin) {
+        return Arrays.stream(ALLOWED_ORIGIN).anyMatch(origin::contains);
+    }
 }

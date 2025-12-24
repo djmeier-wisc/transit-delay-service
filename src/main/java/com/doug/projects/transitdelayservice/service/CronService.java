@@ -69,7 +69,7 @@ public class CronService {
         var feeds = agencyFeedService.getAllAgencyFeeds();
 
         for (AgencyFeedDto feed : feeds) {
-            var rtResp = rtResponseService.pollFeed(feed, 60);
+            var rtResp = rtResponseService.pollFeed(feed);
             if(rtResp != null) retryOnFailureService.pollStaticFeedIfNeeded(rtResp);
             List<AgencyRouteTimestamp> routeTimestamps = rtResp != null && rtResp.getRouteTimestamps() != null ?
                     rtResp.getRouteTimestamps() :

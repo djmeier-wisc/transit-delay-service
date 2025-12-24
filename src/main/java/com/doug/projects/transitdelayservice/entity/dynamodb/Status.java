@@ -1,5 +1,7 @@
 package com.doug.projects.transitdelayservice.entity.dynamodb;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+
 public enum Status {
     ACTIVE("ACT"),
     UNAUTHORIZED("UNAUTHORIZED"), //token missing / 401 / 403 status
@@ -9,11 +11,11 @@ public enum Status {
     DELETED("DEL");
 
     private final String name;
-
     Status(String s) {
         name = s;
     }
 
+    @JsonValue
     public String toString() {
         return this.name;
     }

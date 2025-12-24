@@ -77,7 +77,7 @@ class RouteTimestampUtilTest {
     private AgencyRouteTimestamp createRouteTimestamp(long timestamp) {
         AgencyRouteTimestamp routeTimestamp = new AgencyRouteTimestamp();
         routeTimestamp.setTimestamp(1000L * timestamp); // Use some timestamp value based on the timestamp
-        routeTimestamp.setBusStatesList(Arrays.asList("60#stopId#123", "120#stopId#456"));
+        routeTimestamp.setBusStates(Arrays.asList(BusState.fromString("60#stopId#123"), BusState.fromString("120#stopId#456")));
         return routeTimestamp;
     }
 }

@@ -4,7 +4,6 @@ import lombok.*;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Data
 @AllArgsConstructor
@@ -22,7 +21,7 @@ public class AgencyRouteTimestamp {
     /**
      * The list of routes, in the format of <code>BusStates</code> toString method. delay%closestStopId%tripId
      */
-    private List<String> busStatesList;
+    private List<BusState> busStates;
 
     public String getRouteName() {
         return agencyRoute.split(":")[1];
@@ -45,10 +44,6 @@ public class AgencyRouteTimestamp {
      * @return a modifiable list copy of busStatesLIst
      */
     public List<BusState> getBusStatesCopyList() {
-        return busStatesList.stream().map(BusState::fromString).collect(Collectors.toList());
-    }
-
-    public void setBusStates(List<BusState> busStates) {
-        busStatesList = busStates.stream().map(BusState::toString).collect(Collectors.toList());
+        return busStates;
     }
 }

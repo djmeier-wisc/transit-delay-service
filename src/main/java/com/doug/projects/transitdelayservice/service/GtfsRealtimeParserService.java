@@ -8,28 +8,23 @@ import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyRouteId;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyTripId;
 import com.doug.projects.transitdelayservice.entity.transit.ExpectedBusTimes;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticService;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyRouteRepository;
-import com.doug.projects.transitdelayservice.repository.jpa.AgencyStopTimeRepository;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyTripRepository;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.transit.realtime.GtfsRealtime;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.http.MediaType;
-import org.springframework.http.codec.protobuf.ProtobufDecoder;
-import org.springframework.http.codec.protobuf.ProtobufEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.UnsupportedMediaTypeException;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.time.format.DateTimeParseException;
 import java.util.*;
-import java.util.concurrent.TimeoutException;
 
 import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED;
 import static org.apache.commons.lang3.ObjectUtils.isNotEmpty;
@@ -40,10 +35,9 @@ import static org.springframework.util.CollectionUtils.isEmpty;
 @Slf4j
 public class GtfsRealtimeParserService {
     private final ExpectedBusTimesService expectedBusTimesService;
-    private final GtfsStaticService staticRepo;
     private final AgencyRouteRepository agencyRouteRepository;
     private final AgencyTripRepository agencyTripRepository;
-    private final AgencyStopTimeRepository agencyStopTimeRepository;
+    private final RestTemplate restTemplate;
 
     /**
      * Validate the required fields for Entity mapping
@@ -182,35 +176,18 @@ public class GtfsRealtimeParserService {
                         .flatMap(agencyTripRepository::findRouteNameById));
     }
 
-    public AgencyRealtimeAnalysisResponse pollFeed(AgencyFeedDto feed, int timeoutSeconds) {
-        var client = WebClient.builder().baseUrl(feed.getRealTimeUrl()).codecs(c -> {
-            c.customCodecs().register(new ProtobufDecoder());
-            c.customCodecs().register(new ProtobufEncoder());
-        }).build();
+    public AgencyRealtimeAnalysisResponse pollFeed(AgencyFeedDto feed) {
         try {
-            var rtResponse = client.get()
-                    .accept(MediaType.APPLICATION_PROTOBUF)
-                    .retrieve()
-                    .bodyToMono(byte[].class)
-                    .map(bytes -> {
-                        try {
-                            return GtfsRealtime.FeedMessage.parseFrom(bytes); // Parse Protobuf manually. I can't get this to work otherwise
-                        } catch (InvalidProtocolBufferException e) {
-                            throw new RuntimeException("Failed to parse Protobuf response", e);
-                        }
-                    })
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .blockOptional()
-                    .orElseThrow(RuntimeException::new);
-            return getAgencyRealtimeResponse(feed,rtResponse);
-        } catch (UnsupportedMediaTypeException ex) {
+            var url = new URL(feed.getRealTimeUrl());
+            var rtResp = GtfsRealtime.FeedMessage.parseFrom(url.openStream());
+            return getAgencyRealtimeResponse(feed, rtResp);
+        } catch (MalformedURLException ex) {
             log.error("Feed {} unsupported",feed.getId(), ex);
             return buildUnauthorizedFailureResponse(feed);
-        } catch (RuntimeException ex) {
-            if(ex.getCause().getClass() == TimeoutException.class) {
-                log.error("Feed {} timed out", feed.getId(), ex);
-                return buildTimeoutFailureResponse(feed);
-            }
+        } catch (ResourceAccessException ex) {
+            log.error("Feed {} timed out", feed.getId(), ex);
+            return buildTimeoutFailureResponse(feed);
+        } catch (RuntimeException | IOException ex) {
             log.error("Feed {} runtime issue", feed.getId(), ex);
             return buildUnavailableFailureResponse(feed);
         }

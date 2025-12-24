@@ -3,6 +3,7 @@ package com.doug.projects.transitdelayservice.entity.jpa;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -20,7 +21,7 @@ public class AgencyShape {
     @ToString.Exclude
     @OneToMany(mappedBy = "agencyShape")
     @OrderBy("id.sequence ASC")
-    private Set<AgencyShapePoint> agencyShapePoints;
+    private List<AgencyShapePoint> agencyShapePoints;
 
     @ToString.Exclude
     @OneToMany(mappedBy = "agencyShape")

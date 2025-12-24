@@ -69,12 +69,12 @@ class CronServiceTest {
         ReflectionTestUtils.setField(cronService, "doesRealtimeCronRun", true);
         when(agencyFeedService.getAllAgencyFeeds())
                 .thenReturn(getAgencyFeedList());
-        when(rtResponseService.pollFeed(eq(getAgencyFeedActive()), anyInt()))
+        when(rtResponseService.pollFeed(eq(getAgencyFeedActive())))
                 .thenReturn(getResponse());
         when(retryOnFailureService.updateFeedStatus(eq(getResponse()))).thenReturn(List.of(new AgencyRouteTimestamp()));
         cronService.writeGtfsRealtimeData();
         verify(agencyFeedService, times(1)).getAllAgencyFeeds();
-        verify(rtResponseService, times(1)).pollFeed(eq(getAgencyFeedActive()), anyInt());
+        verify(rtResponseService, times(1)).pollFeed(eq(getAgencyFeedActive()));
         verify(routeTimestampRepository, times(1)).saveAll(eq(List.of(new AgencyRouteTimestamp())), anyString());
     }
 
