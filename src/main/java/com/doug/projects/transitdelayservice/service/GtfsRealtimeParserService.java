@@ -1,44 +1,43 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.AgencyRealtimeResponse;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.entity.dynamodb.BusState;
-import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
+import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.BusState;
+import com.doug.projects.transitdelayservice.entity.Status;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyRouteId;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyTripId;
 import com.doug.projects.transitdelayservice.entity.transit.ExpectedBusTimes;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyRouteRepository;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyTripRepository;
 import com.doug.projects.transitdelayservice.util.TransitDateUtil;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.transit.realtime.GtfsRealtime;
+import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.http.MediaType;
-import org.springframework.http.codec.protobuf.ProtobufDecoder;
-import org.springframework.http.codec.protobuf.ProtobufEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.UnsupportedMediaTypeException;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
-import reactor.util.retry.Retry;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.time.format.DateTimeParseException;
 import java.util.*;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 import static com.google.transit.realtime.GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED;
-import static org.apache.commons.lang3.ObjectUtils.isEmpty;
 import static org.apache.commons.lang3.ObjectUtils.isNotEmpty;
+import static org.springframework.util.CollectionUtils.isEmpty;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GtfsRealtimeParserService {
     private final ExpectedBusTimesService expectedBusTimesService;
-    private final GtfsStaticRepository staticRepo;
+    private final AgencyRouteRepository agencyRouteRepository;
+    private final AgencyTripRepository agencyTripRepository;
+    private final RestTemplate restTemplate;
 
     /**
      * Validate the required fields for Entity mapping
@@ -47,12 +46,12 @@ public class GtfsRealtimeParserService {
      * @return true if all required fields are not null
      */
     private static boolean validateRequiredFields(GtfsRealtime.TripUpdate entity) {
-        return entity.getTrip().getScheduleRelationship().equals(SCHEDULED) && getFirstScheduled(entity).isPresent();
+        return entity.getTrip().getScheduleRelationship().equals(SCHEDULED) && getFirstScheduled(entity).isPresent() && entity.hasTrip() && entity.getTrip().hasTripId();
     }
 
     @NotNull
-    private static Optional<BusState> adaptBusStateFrom(GtfsRealtime.TripUpdate tripUpdate, ExpectedBusTimes tripMap) {
-        if (tripUpdate.getStopTimeUpdateCount() <= 0)
+    private Optional<BusState> adaptBusStateFrom(GtfsRealtime.TripUpdate tripUpdate, ExpectedBusTimes tripMap) {
+        if (getFirstScheduled(tripUpdate).isEmpty())
             return Optional.empty();
         OptionalInt delay = getDelay(tripUpdate, tripMap);
         if (delay.isEmpty())
@@ -60,7 +59,7 @@ public class GtfsRealtimeParserService {
         BusState busState = new BusState();
         busState.setTripId(tripUpdate.getTrip().getTripId());
         busState.setDelay(delay.getAsInt());
-        busState.setClosestStopId(tripUpdate.getStopTimeUpdate(0).getStopId());
+        busState.setClosestStopId(getFirstScheduled(tripUpdate).get().getStopId());
         return Optional.of(busState);
     }
 
@@ -73,7 +72,7 @@ public class GtfsRealtimeParserService {
      * @param tripMap the tripIds and their associated arrival/departure times
      * @return the delay of the trip, or null if the trip data was not found in tripMap / the feed was invalid
      */
-    private static OptionalInt getDelay(GtfsRealtime.TripUpdate tu, ExpectedBusTimes tripMap) {
+    private OptionalInt getDelay(GtfsRealtime.TripUpdate tu, ExpectedBusTimes tripMap) {
         if (tu.hasDelay()) {
             return OptionalInt.of(tu.getDelay());
         }
@@ -117,7 +116,7 @@ public class GtfsRealtimeParserService {
      * @param tripMap used to get the expected departure/arrival time from schedule
      * @return empty if there are no SCHEDULED relationship tripUpdates, or if it has no departure/arrival time. Otherwise, parses the diff between scheduled and actual departure/arrival
      */
-    private static OptionalInt extractDifferenceFromActualAndExpectedTime(GtfsRealtime.TripUpdate tu, ExpectedBusTimes tripMap) {
+    private OptionalInt extractDifferenceFromActualAndExpectedTime(GtfsRealtime.TripUpdate tu, ExpectedBusTimes tripMap) {
         var optionalStopTimeUpdate = getFirstScheduled(tu);
         if (optionalStopTimeUpdate.isEmpty()) {
             return OptionalInt.empty();
@@ -127,19 +126,17 @@ public class GtfsRealtimeParserService {
         var departure = currStopTimeUpdate.getDeparture();
         var timezone = tripMap.getTimezone();
         try {
-            if (currStopTimeUpdate.hasDeparture() && departure.hasTime()) {
-                var actualArrival = departure.getTime();
-                var expectedArrival = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-                if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
-                    return OptionalInt.empty();
-                }
-                return OptionalInt.of(TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone));
-            } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime()) {
-                var actualArrival = arrival.getTime();
-                var expectedArrival = tripMap.getArrivalTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
-                if (isEmpty(expectedArrival) || isEmpty(timezone) || expectedArrival.isEmpty()) {
-                    return OptionalInt.empty();
-                }
+            var expectedDeparture = tripMap.getDepartureTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
+            if (expectedDeparture.isEmpty()) {
+                log.error("TripMap did not contain dept {} trip sq {}", tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
+            }
+            var actualDeparture = departure.getTime();
+            var actualArrival = arrival.getTime();
+            var expectedArrival = tripMap.getArrivalTime(tu.getTrip().getTripId(), currStopTimeUpdate.getStopSequence());
+
+            if (currStopTimeUpdate.hasDeparture() && departure.hasTime() && isNotEmpty(expectedDeparture) && isNotEmpty(timezone) && expectedDeparture.isPresent()) {
+                return OptionalInt.of(TransitDateUtil.calculateTimeDifferenceInSeconds(expectedDeparture.get(), actualDeparture, timezone));
+            } else if (currStopTimeUpdate.hasArrival() && arrival.hasTime() && isNotEmpty(expectedArrival) && isNotEmpty(timezone) && expectedArrival.isPresent()) {
                 return OptionalInt.of(TransitDateUtil.calculateTimeDifferenceInSeconds(expectedArrival.get(), actualArrival, timezone));
             }
         } catch (DateTimeParseException parseException) {
@@ -157,91 +154,58 @@ public class GtfsRealtimeParserService {
                 .findFirst();
     }
 
-    private static AgencyRealtimeResponse buildTimeoutFailureResponse(AgencyFeed feed) {
-        return AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.TIMEOUT).feed(feed).build();
+    private static AgencyRealtimeAnalysisResponse buildTimeoutFailureResponse(AgencyFeedDto feed) {
+        return AgencyRealtimeAnalysisResponse.builder().feedStatus(Status.TIMEOUT).feed(feed).build();
     }
 
-    private static AgencyRealtimeResponse buildUnauthorizedFailureResponse(AgencyFeed feed) {
-        return AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.UNAUTHORIZED).feed(feed).build();
+    private static AgencyRealtimeAnalysisResponse buildUnauthorizedFailureResponse(AgencyFeedDto feed) {
+        return AgencyRealtimeAnalysisResponse.builder().feedStatus(Status.UNAUTHORIZED).feed(feed).build();
     }
 
-    private static AgencyRealtimeResponse buildUnavailableFailureResponse(AgencyFeed feed) {
-        return AgencyRealtimeResponse.builder().feedStatus(AgencyFeed.Status.UNAVAILABLE).feed(feed).build();
+    private static AgencyRealtimeAnalysisResponse buildUnavailableFailureResponse(AgencyFeedDto feed) {
+        return AgencyRealtimeAnalysisResponse.builder().feedStatus(Status.UNAVAILABLE).feed(feed).build();
     }
 
-    private Optional<String> getRouteName(GtfsRealtime.TripUpdate tripUpdate, Map<String, String> tripMap, Map<String, String> routeMap) {
-        String routeId = tripUpdate.getTrip().getRouteId();
-        if (StringUtils.isNotBlank(routeId) && routeMap.containsKey(routeId)) {
-            return Optional.ofNullable(routeMap.get(routeId));
+    private Optional<String> getRouteName(GtfsRealtime.TripUpdate tripUpdate, String agencyId) {
+        return Optional.ofNullable(tripUpdate.getTrip().getRouteId())
+                .filter(StringUtils::isNotBlank)
+                .map(routeId -> new AgencyRouteId(routeId, agencyId))
+                .flatMap(agencyRouteRepository::findRouteNameById)
+                .or(()->Optional.ofNullable(tripUpdate.getTrip().getTripId())
+                        .map(tripId -> new AgencyTripId(tripId, agencyId))
+                        .flatMap(agencyTripRepository::findRouteNameById));
+    }
 
+    public AgencyRealtimeAnalysisResponse pollFeed(AgencyFeedDto feed) {
+        try {
+            var url = new URL(feed.getRealTimeUrl());
+            var rtResp = GtfsRealtime.FeedMessage.parseFrom(url.openStream());
+            return getAgencyRealtimeResponse(feed, rtResp);
+        } catch (MalformedURLException ex) {
+            log.error("Feed {} unsupported",feed.getId(), ex);
+            return buildUnauthorizedFailureResponse(feed);
+        } catch (ResourceAccessException ex) {
+            log.error("Feed {} timed out", feed.getId(), ex);
+            return buildTimeoutFailureResponse(feed);
+        } catch (RuntimeException | IOException ex) {
+            log.error("Feed {} runtime issue", feed.getId(), ex);
+            return buildUnavailableFailureResponse(feed);
         }
-        String tripId = tripUpdate.getTrip().getTripId();
-        if (StringUtils.isNotBlank(tripId) && tripMap.containsKey(tripId)) {
-            return Optional.ofNullable(tripMap.get(tripId));
-        }
-        return Optional.empty();
     }
 
-    public Mono<AgencyRealtimeResponse> convertFromAsync(AgencyFeed feed, int timeoutSeconds) {
-        var client = WebClient.builder().baseUrl(feed.getRealTimeUrl()).codecs(c -> {
-            c.customCodecs().register(new ProtobufDecoder());
-            c.customCodecs().register(new ProtobufEncoder());
-        }).build();
-        return client.get()
-                .accept(MediaType.APPLICATION_PROTOBUF)
-                .retrieve()
-                .bodyToMono(byte[].class)
-                .map(bytes -> {
-                    try {
-                        return GtfsRealtime.FeedMessage.parseFrom(bytes); // Parse Protobuf manually. I can't get this to work otherwise
-                    } catch (InvalidProtocolBufferException e) {
-                        throw new RuntimeException("Failed to parse Protobuf response", e);
-                    }
-                })
-                .timeout(Duration.ofSeconds(timeoutSeconds))
-                .retryWhen(Retry.backoff(3, Duration.ofSeconds(5)))
-                .flatMap(message -> getAgencyRealtimeResponse(feed, message))
-                .onErrorReturn(TimeoutException.class, buildTimeoutFailureResponse(feed))
-                .onErrorReturn(UnsupportedMediaTypeException.class, buildUnauthorizedFailureResponse(feed))
-                .onErrorReturn(RuntimeException.class, buildUnavailableFailureResponse(feed));
-    }
-
-    private Mono<AgencyRealtimeResponse> getAgencyRealtimeResponse(AgencyFeed feed, GtfsRealtime.FeedMessage message) {
+    private AgencyRealtimeAnalysisResponse getAgencyRealtimeResponse(AgencyFeedDto feed, GtfsRealtime.FeedMessage message) {
         long timestamp = message.getHeader().getTimestamp();
         String feedId = feed.getId();
         List<GtfsRealtime.TripUpdate> tripUpdates = message.getEntityList().stream()
                 .map(GtfsRealtime.FeedEntity::getTripUpdate)
                 .toList();
-        return Mono.zip(expectedBusTimesService.getTripMapFor(feedId, tripUpdates), staticRepo.getTripIdsAndRouteIds(feedId, getTripIds(tripUpdates), getRouteIds(tripUpdates)).collectList())
-                .map(staticData -> getAgencyRealtimeResponse(feed, message, staticData.getT1(), staticData.getT2(), timestamp));
+        return getAgencyRealtimeResponse(feed,message, expectedBusTimesService.getTripMapFor(feedId, tripUpdates), timestamp);
     }
 
-    private List<String> getRouteIds(List<GtfsRealtime.TripUpdate> tripUpdates) {
-        return tripUpdates.stream()
-                .map(GtfsRealtime.TripUpdate::getTrip)
-                .filter(Objects::nonNull)
-                .map(GtfsRealtime.TripDescriptor::getRouteId)
-                .filter(StringUtils::isNotBlank)
-                .distinct()
-                .toList();
-    }
-
-    private List<String> getTripIds(List<GtfsRealtime.TripUpdate> tripUpdates) {
-        return tripUpdates.stream()
-                .map(GtfsRealtime.TripUpdate::getTrip)
-                .filter(Objects::nonNull)
-                .map(GtfsRealtime.TripDescriptor::getTripId)
-                .filter(StringUtils::isNotBlank)
-                .distinct()
-                .toList();
-    }
-
-    private AgencyRealtimeResponse getAgencyRealtimeResponse(AgencyFeed feed,
-                                                             GtfsRealtime.FeedMessage message,
-                                                             ExpectedBusTimes expectedBusTimes,
-                                                             List<GtfsStaticData> staticData, long timestamp) {
-        Map<String, String> tripIdToRouteNameMap = staticData.stream().collect(Collectors.toMap(GtfsStaticData::getTripId, GtfsStaticData::getRouteName, (a, b) -> a));
-        Map<String, String> routeIdToRouteNameMap = staticData.stream().collect(Collectors.toMap(GtfsStaticData::getId, GtfsStaticData::getRouteName, (a, b) -> a));
+    private AgencyRealtimeAnalysisResponse getAgencyRealtimeResponse(AgencyFeedDto feed,
+                                                                     GtfsRealtime.FeedMessage message,
+                                                                     ExpectedBusTimes expectedBusTimes,
+                                                                     long timestamp) {
         String feedId = feed.getId();
         Map<String, List<GtfsRealtime.TripUpdate>> routeNameToTripUpdateMap = new HashMap<>();
         for (GtfsRealtime.FeedEntity e : message.getEntityList()) {
@@ -249,12 +213,12 @@ public class GtfsRealtimeParserService {
             if (!validateRequiredFields(tu)) {
                 continue;
             }
-            Optional<String> routeName = getRouteName(tu, tripIdToRouteNameMap, routeIdToRouteNameMap);
+            Optional<String> routeName = getRouteName(tu, feedId);
             if (routeName.isEmpty()) {
                 log.error("Unable to get routeName! Returning as outdated for {}", feed.getId());
-                return AgencyRealtimeResponse.builder()
+                return AgencyRealtimeAnalysisResponse.builder()
                         .feed(feed)
-                        .feedStatus(AgencyFeed.Status.OUTDATED)
+                        .feedStatus(Status.OUTDATED)
                         .build();
             }
             routeNameToTripUpdateMap.computeIfAbsent(routeName.get(), k -> new ArrayList<>()).add(tu);
@@ -266,15 +230,15 @@ public class GtfsRealtimeParserService {
                 .toList();
         if (containsNullDelay(routeTimestampList)) {
             log.error("Feed {} had null delay!", feedId);
-            return AgencyRealtimeResponse.builder()
+            return AgencyRealtimeAnalysisResponse.builder()
                     .feed(feed)
-                    .feedStatus(AgencyFeed.Status.OUTDATED)
+                    .feedStatus(Status.OUTDATED)
                     .routeTimestamps(filterNullDelay(routeTimestampList))
                     .build();
         }
-        return AgencyRealtimeResponse.builder()
+        return AgencyRealtimeAnalysisResponse.builder()
                 .feed(feed)
-                .feedStatus(AgencyFeed.Status.ACTIVE)
+                .feedStatus(Status.ACTIVE)
                 .routeTimestamps(routeTimestampList)
                 .build();
     }

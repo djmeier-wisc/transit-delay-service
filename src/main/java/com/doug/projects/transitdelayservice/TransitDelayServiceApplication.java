@@ -1,27 +1,25 @@
 package com.doug.projects.transitdelayservice;
 
+import com.google.protobuf.ExtensionRegistry;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.converter.protobuf.ProtobufHttpMessageConverter;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.web.reactive.config.EnableWebFlux;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
-import org.springframework.web.reactive.function.client.WebClient;
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedAsyncClient;
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
+import org.springframework.web.client.RestTemplate;
 
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.time.Duration;
 
 @SpringBootApplication
 @EnableScheduling
-@EnableWebFlux
 @OpenAPIDefinition(
         servers = {
-                @Server(url = "https://api.my-precious-time.com", description = "Production API")
+                @Server(url = "https://api.my-precious-time.com", description = "Production API"),
+                @Server(url = "http://localhost:8080", description = "Local API")
         }
 )
 @RequiredArgsConstructor
@@ -32,38 +30,17 @@ public class TransitDelayServiceApplication {
     }
 
     @Bean
-    public DynamoDbEnhancedClient provideDynamoDb() {
-        return DynamoDbEnhancedClient.create();
+    public RestTemplate restTemplate(RestTemplateBuilder builder, ProtobufHttpMessageConverter converter) {
+        return builder
+                .setConnectTimeout(Duration.ofSeconds(5)) // Time to establish connection
+                .setReadTimeout(Duration.ofSeconds(5))    // Time to wait for data
+                .additionalMessageConverters(converter)
+                .build();
     }
 
     @Bean
-    public DynamoDbEnhancedAsyncClient provideAsyncEnhancedClient() {
-        return DynamoDbEnhancedAsyncClient.create();
-    }
-
-    @Bean
-    public WebClient webClient() {
-        return WebClient.builder()
-                .exchangeStrategies(
-                        ExchangeStrategies.builder()
-                                .codecs(clientCodecConfigurer -> clientCodecConfigurer
-                                        .defaultCodecs().maxInMemorySize((1000 * 1000 * 1024))).build())
-                .codecs(clientCodecConfigurer -> clientCodecConfigurer.defaultCodecs()
-                        .maxInMemorySize(1000 * 1000 * 1024)).build();
-    }
-
-    @Bean("realtime")
-    public Executor realtimeExecutor() {
-        return Executors.newFixedThreadPool(2);
-    }
-
-    @Bean("retry")
-    public Executor retryExecutor() {
-        return Executors.newFixedThreadPool(2);
-    }
-
-    @Bean("dynamoWriting")
-    public Executor dynamoExecutor() {
-        return Executors.newFixedThreadPool(2);
+    public ProtobufHttpMessageConverter protobufHttpMessageConverter() {
+        ExtensionRegistry registry = ExtensionRegistry.newInstance();
+        return new ProtobufHttpMessageConverter();
     }
 }

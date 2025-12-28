@@ -49,30 +49,33 @@ class TransitDateUtilTest {
 
     @Test
     void calculateTimeDifferenceInSeconds_lateBus() {
-        //9-13-24 11:55PM
-        long dateOld = 1726289700;
-        //9-14-24 12:00AM
-        long dateNew = 1726290000;
-        String cstTimezone = "America/Chicago";
-        ZoneId cstZone = ZoneId.of("America/Chicago");
-        ZonedDateTime zonedDateOld = ZonedDateTime.of(LocalDateTime.ofInstant(Instant.ofEpochSecond(dateOld), cstZone), cstZone);
+        // 1. Actual Time: 2024-09-14 00:00:00 CST
+        long actualTimestamp = 1726290000;
 
-        var difference = TransitDateUtil.calculateTimeDifferenceInSeconds(zonedDateOld.toLocalTime().toString(), dateNew, cstTimezone);
-        assertEquals(difference, 300);
+        // 2. Expected GTFS Time: 23:55:00 (86100 seconds from midnight)
+        // The service day starts 9/13 00:00:00. Expected arrival is 9/13 23:55:00.
+        String expectedGtfsTime = "23:55:00"; // 86100 seconds
+
+        String cstTimezone = "America/Chicago";
+
+        // Expected Result: Actual (9/14 00:00) - Expected (9/13 23:55) = +300 seconds
+        var difference = TransitDateUtil.calculateTimeDifferenceInSeconds(
+                expectedGtfsTime,
+                actualTimestamp,
+                cstTimezone
+        );
+
+        assertEquals(300, difference);
     }
 
     @Test
     void calculateTimeDifferenceInSeconds_earlyBus() {
         //9-13-24 11:55PM
         long dateOld = 1726289700;
-        //9-14-24 12:00AM
-        long dateNew = 1726290000;
         String cstTimezone = "America/Chicago";
-        ZoneId cstZone = ZoneId.of("America/Chicago");
-        ZonedDateTime zonedDateNew = ZonedDateTime.of(LocalDateTime.ofInstant(Instant.ofEpochSecond(dateNew), cstZone), cstZone);
 
-        var differenceEarly = TransitDateUtil.calculateTimeDifferenceInSeconds(zonedDateNew.toLocalTime().toString(), dateOld, cstTimezone);
-        assertEquals(differenceEarly, -300);
+        var differenceEarly = TransitDateUtil.calculateTimeDifferenceInSeconds("24:00:00", dateOld, cstTimezone);
+        assertEquals(-300, differenceEarly);
     }
 
 

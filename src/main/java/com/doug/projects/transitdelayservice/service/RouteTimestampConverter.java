@@ -1,6 +1,6 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
 
 import java.util.List;
 

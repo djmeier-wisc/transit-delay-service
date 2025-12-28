@@ -1,9 +1,10 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.AgencyRealtimeResponse;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyRouteTimestamp;
-import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
+import com.doug.projects.transitdelayservice.entity.AgencyRealtimeAnalysisResponse;
+import com.doug.projects.transitdelayservice.entity.AgencyRouteTimestamp;
+import com.doug.projects.transitdelayservice.entity.Status;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyFeedRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,7 +13,7 @@ import org.springframework.util.CollectionUtils;
 import java.util.Collections;
 import java.util.List;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.Status.*;
+import static com.doug.projects.transitdelayservice.entity.Status.*;
 
 /**
  * Used in the event of a failure when reading static data or realtime data.
@@ -22,13 +23,13 @@ import static com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed.S
 @Slf4j
 @RequiredArgsConstructor
 public class GtfsRetryOnFailureService {
-    private final AgencyFeedRepository feedRepository;
     private final GtfsStaticParserService staticParserService;
     private final GtfsRealtimeParserService realtimeParserService;
+    private final AgencyFeedRepository agencyFeedRepository;
 
-    public List<AgencyRouteTimestamp> pollStaticFeedIfNeeded(AgencyRealtimeResponse realtimeResponse) {
-        AgencyFeed.Status feedStatus = realtimeResponse.getFeedStatus();
-        AgencyFeed feed = realtimeResponse.getFeed();
+    public List<AgencyRouteTimestamp> pollStaticFeedIfNeeded(AgencyRealtimeAnalysisResponse realtimeResponse) {
+        Status feedStatus = realtimeResponse.getFeedStatus();
+        AgencyFeedDto feed = realtimeResponse.getFeed();
         recheckFeedByStatus(feedStatus, feed);
         if (CollectionUtils.isEmpty(realtimeResponse.getRouteTimestamps())) {
             return Collections.emptyList();
@@ -36,9 +37,9 @@ public class GtfsRetryOnFailureService {
         return realtimeResponse.getRouteTimestamps();
     }
 
-    public List<AgencyRouteTimestamp> updateFeedStatus(AgencyRealtimeResponse realtimeResponse) {
-        AgencyFeed.Status feedStatus = realtimeResponse.getFeedStatus();
-        AgencyFeed feed = realtimeResponse.getFeed();
+    public List<AgencyRouteTimestamp> updateFeedStatus(AgencyRealtimeAnalysisResponse realtimeResponse) {
+        Status feedStatus = realtimeResponse.getFeedStatus();
+        AgencyFeedDto feed = realtimeResponse.getFeed();
         updateFeedToStatus(feed, feedStatus);
         if (CollectionUtils.isEmpty(realtimeResponse.getRouteTimestamps())) {
             return Collections.emptyList();
@@ -61,12 +62,10 @@ public class GtfsRetryOnFailureService {
      * @param feedStatus the (presumably) failed status of the feed. Unless the feed is outdated or ACTIVE, we write the failure status
      * @param feed the feed to check against. If the status is some kind of failure, it will be used to remove the failed feed.
      */
-    private void recheckFeedByStatus(AgencyFeed.Status feedStatus, AgencyFeed feed) {
+    private void recheckFeedByStatus(Status feedStatus, AgencyFeedDto feed) {
         switch (feedStatus) {
             case ACTIVE -> {
-                if (!feed.getStatus().equals(ACTIVE.toString())) {
-                    updateFeedToStatus(feed, ACTIVE);
-                }
+                updateFeedToStatus(feed, ACTIVE);
             }
             case UNAUTHORIZED, DELETED -> {
                 updateFeedToStatus(feed, feedStatus);
@@ -77,18 +76,18 @@ public class GtfsRetryOnFailureService {
                     log.error("Retried reading static feed, but failed. Marking feed as unavailable");
                     updateFeedToStatus(feed, UNAVAILABLE);
                 }
-                staticParserService.writeGtfsStaticDataToDynamoFromDiskSync(feed);
+                staticParserService.writeGtfsStaticDataToDbFromDiskSync(feed);
                 sleepFor(5);
-                var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).block();
-                if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
-                    log.error("Retried reading realtime feed, but was unable to find associated staticData in Dynamo");
+                var realtimeResult = realtimeParserService.pollFeed(feed);
+                if (realtimeResult.getFeedStatus() != ACTIVE) {
+                    log.error("Retried reading realtime feed, but was unable to find associated staticData in db");
                     updateFeedToStatus(feed, realtimeResult.getFeedStatus());
                 }
             }
             case TIMEOUT, UNAVAILABLE -> {
                 sleepFor(5);
-                var realtimeResult = realtimeParserService.convertFromAsync(feed, 240).block();
-                if (realtimeResult.getFeedStatus() != AgencyFeed.Status.ACTIVE) {
+                var realtimeResult = realtimeParserService.pollFeed(feed);
+                if (realtimeResult.getFeedStatus() != ACTIVE) {
                     log.error("TIMEOUT - marking feed as unavailable");
                     updateFeedToStatus(feed, TIMEOUT);
                 }
@@ -96,10 +95,8 @@ public class GtfsRetryOnFailureService {
         }
     }
 
-    private void updateFeedToStatus(AgencyFeed newFeed, AgencyFeed.Status newStatus) {
+    private void updateFeedToStatus(AgencyFeedDto newFeed, Status newStatus) {
         log.error("Updating feed {} to {}", newFeed.getId(), newStatus);
-        feedRepository.removeAgencyFeed(newFeed);
-        newFeed.setStatus(String.valueOf(newStatus));
-        feedRepository.writeAgencyFeed(newFeed);
+        agencyFeedRepository.updateStatusById(newStatus,newFeed.getId());
     }
 }

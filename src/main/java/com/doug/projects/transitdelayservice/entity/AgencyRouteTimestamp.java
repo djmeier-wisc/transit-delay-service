@@ -1,15 +1,10 @@
-package com.doug.projects.transitdelayservice.entity.dynamodb;
+package com.doug.projects.transitdelayservice.entity;
 
 import lombok.*;
 import org.apache.commons.lang3.StringUtils;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
-@DynamoDbBean
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -22,26 +17,11 @@ public class AgencyRouteTimestamp {
     /**
      * The timestamp, gathered from GTFS realtime feed. DO NOT USE SYSTEM TIMESTAMP to avoid duplication
      */
-    @Getter(AccessLevel.NONE)
     private Long timestamp;
     /**
      * The list of routes, in the format of <code>BusStates</code> toString method. delay%closestStopId%tripId
      */
-    private List<String> busStatesList;
-
-    @DynamoDbPartitionKey
-    public String getAgencyRoute() {
-        return agencyRoute;
-    }
-
-    @DynamoDbSortKey
-    public Long getTimestamp() {
-        return timestamp;
-    }
-
-    public String getAgencyId() {
-        return agencyRoute.split(":")[0];
-    }
+    private List<BusState> busStates;
 
     public String getRouteName() {
         return agencyRoute.split(":")[1];
@@ -51,12 +31,11 @@ public class AgencyRouteTimestamp {
         return agencyId + ":" + routeName;
     }
 
-    public boolean setAgencyRoute(String agencyId, String routeName) {
+    public void setAgencyRoute(String agencyId, String routeName) {
         if (StringUtils.contains(agencyId, ":") || StringUtils.contains(routeName, ":")) {
-            return false;
+            return;
         }
         agencyRoute = createKey(agencyId, routeName);
-        return true;
     }
 
     /**
@@ -65,10 +44,6 @@ public class AgencyRouteTimestamp {
      * @return a modifiable list copy of busStatesLIst
      */
     public List<BusState> getBusStatesCopyList() {
-        return busStatesList.stream().map(BusState::fromString).collect(Collectors.toList());
-    }
-
-    public void setBusStates(List<BusState> busStates) {
-        busStatesList = busStates.stream().map(BusState::toString).collect(Collectors.toList());
+        return busStates;
     }
 }

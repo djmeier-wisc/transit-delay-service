@@ -1,4 +1,3 @@
-region: us-east-1
 metro:
   realtime: http://transitdata.cityofmadison.com/GTFS-RealTime/TrapezeRealTimeFeed.json
   gtfsStatic: http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip
@@ -15,7 +14,26 @@ spring:
       spec:
         maximumSize: 50000
         expireAfterAccess: 1d
+  datasource:
+    # The hostname 'db' is the name of the PostgreSQL service in your docker-compose.yml
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 100
+        order_updates: true
+        order_inserts: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 server:
   port: 8080
 doesAgencyCronRun: true
 doesRealtimeCronRun: true
+logging:
+  level:
+    org.hibernate.persister.entity.AbstractEntityPersister: ERROR

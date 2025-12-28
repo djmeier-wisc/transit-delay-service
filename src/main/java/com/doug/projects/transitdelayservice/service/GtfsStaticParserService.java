@@ -1,11 +1,11 @@
 package com.doug.projects.transitdelayservice.service;
 
 import com.doug.projects.transitdelayservice.entity.AgencyStaticStatus;
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
-import com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData;
+import com.doug.projects.transitdelayservice.entity.GtfsStaticDataType;
 import com.doug.projects.transitdelayservice.entity.gtfs.csv.*;
-import com.doug.projects.transitdelayservice.repository.AgencyFeedRepository;
-import com.doug.projects.transitdelayservice.repository.GtfsStaticRepository;
+import com.doug.projects.transitdelayservice.entity.jpa.*;
+import com.doug.projects.transitdelayservice.repository.jpa.*;
+import com.doug.projects.transitdelayservice.util.TransitDateUtil;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvParser;
@@ -15,103 +15,40 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.zeroturnaround.zip.ZipUtil;
-import reactor.core.publisher.FluxSink;
 
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.time.Duration;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-import static com.doug.projects.transitdelayservice.entity.dynamodb.GtfsStaticData.TYPE.*;
-import static com.doug.projects.transitdelayservice.util.TransitDateUtil.replaceGreaterThan24Hr;
+import static com.doug.projects.transitdelayservice.entity.GtfsStaticDataType.*;
 import static com.doug.projects.transitdelayservice.util.UrlRedirectUtil.handleRedirect;
-import static io.micrometer.common.util.StringUtils.isNotEmpty;
+import static io.micrometer.common.util.StringUtils.isBlank;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GtfsStaticParserService {
-    private static final DateTimeFormatter staticScheduleTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private final GtfsStaticRepository gtfsStaticRepository;
+
     private final AgencyFeedRepository agencyFeedRepository;
-
-    private static GtfsStaticData convert(RoutesAttributes routesAttributes, String agencyId, Map<String, String> routeIdToNameMap) {
-        String routeName = routesAttributes.getRouteShortName();
-        if (StringUtils.isBlank(routeName)) {
-            routeName = routesAttributes.getRouteLongName();
-        }
-        routeIdToNameMap.put(routesAttributes.getRouteId(), routeName);
-        GtfsStaticData staticData = new GtfsStaticData();
-        staticData.setAgencyType(agencyId, ROUTE);
-        staticData.setId(routesAttributes.getRouteId());
-        staticData.setRouteName(routeName);
-        staticData.setRouteColor('#' + routesAttributes.getRouteColor());
-        staticData.setRouteSortOrder(routesAttributes.getRouteSortOrder());
-        return staticData;
-    }
-
-    private static GtfsStaticData convert(StopAttributes stopAttributes, String agencyId, Map<String, String> stopIdToNameMap) {
-        stopIdToNameMap.put(stopAttributes.getStopId(), stopAttributes.getStopName());
-        GtfsStaticData staticData = new GtfsStaticData();
-        staticData.setAgencyType(agencyId, STOP);
-        staticData.setId(String.valueOf(stopAttributes.getStopId()));
-        staticData.setStopName(stopAttributes.getStopName());
-        staticData.setStopLat(stopAttributes.getStopLat());
-        staticData.setStopLon(stopAttributes.getStopLon());
-        return staticData;
-    }
-
-    /**
-     * Create a staticData object, getting routeName from routeIdToServiceNameMap. Populates tripIdToServiceNameMap based on contents of routeIdToServiceNameMap.
-     *
-     * @param tripAttributes   the trip.txt row to populate staticData based on
-     * @param agencyId         the agencyId we are pulling data from, used to generate id
-     * @param routeIdToNameMap unmodified, used to get route name based on route id
-     * @param tripIdToNameMap  modified, put tripId and respective routeName gathered from routeIdToNameMap
-     * @return
-     */
-    private static GtfsStaticData convert(TripAttributes tripAttributes, String agencyId,
-                                          Map<String, String> routeIdToNameMap,
-                                          Map<String, String> tripIdToNameMap) {
-        GtfsStaticData staticData = new GtfsStaticData();
-        staticData.setAgencyType(agencyId, TRIP);
-        staticData.setId(tripAttributes.getTripId());
-        staticData.setRouteName(routeIdToNameMap.get(tripAttributes.getRouteId()));
-        staticData.setShapeId(tripAttributes.getShapeId());
-        tripIdToNameMap.put(tripAttributes.getTripId(), routeIdToNameMap.get(tripAttributes.getRouteId()));
-        return staticData;
-    }
-
-    private static GtfsStaticData convert(StopTimeAttributes stopTimeAttributes,
-                                          String agencyId,
-                                          Map<String, String> tripIdToNameMap,
-                                          Map<String, String> stopIdToNameMap) {
-        GtfsStaticData staticData = new GtfsStaticData();
-        staticData.setAgencyType(agencyId, STOPTIME);
-        staticData.setId(String.valueOf(stopTimeAttributes.getTripId()), stopTimeAttributes.getStopSequence());
-        staticData.setDepartureTime(stopTimeAttributes.getDepartureTime());
-        staticData.setArrivalTime(stopTimeAttributes.getArrivalTime());
-        staticData.setStopId(stopTimeAttributes.getStopId());
-        staticData.setStopName(stopIdToNameMap.get(stopTimeAttributes.getStopId()));
-        staticData.setRouteName(tripIdToNameMap.get(stopTimeAttributes.getTripId()));
-        return staticData;
-    }
+    private final AgencyRouteRepository agencyRouteRepository;
+    private final AgencyTripRepository agencyTripRepository;
+    private final AgencyShapePointRepository agencyShapePointRepository;
+    private final AgencyStopRepository agencyStopRepository;
+    private final AgencyStopTimeRepository agencyStopTimeRepository;
+    private final AgencyShapeRepository agencyShapeRepository;
 
     /**
      * Gets the associated type with this filename by checking whether the filename ENDS with type.getFileName.
      */
-    public static GtfsStaticData.TYPE getTypeEndsWith(String fileName) {
-        for (GtfsStaticData.TYPE type : GtfsStaticData.TYPE.values()) {
-            if (StringUtils.endsWith(fileName, type.getFileName())) {
-                return type;
+    public static GtfsStaticDataType getTypeEndsWith(String fileName) {
+        for (GtfsStaticDataType gtfsStaticDataType : GtfsStaticDataType.values()) {
+            if (StringUtils.endsWith(fileName, gtfsStaticDataType.getFileName())) {
+                return gtfsStaticDataType;
             }
         }
         return null;
@@ -122,66 +59,42 @@ public class GtfsStaticParserService {
      * <br /><br />
      * For example: 5:00,null,null,5:03,null,null,5:06 would be replaced with 5:00,5:01,5:02,5:03,5:04,5:05,5:06
      *
-     * @param gtfsList the gtfsList to be modified by this method
+     * @param stopTimes the gtfsList to be modified by this method
      */
-    public static void interpolateDelay(List<GtfsStaticData> gtfsList) {
-        gtfsList.sort(Comparator.comparing(GtfsStaticData::getId, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(GtfsStaticData::getSequence, Comparator.nullsLast(Comparator.naturalOrder())));
+    public static void interpolateDelay(List<AgencyStopTime> stopTimes) {
+        stopTimes.sort(Comparator.comparing(AgencyStopTime::getTripId, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(AgencyStopTime::getStopSeq, Comparator.nullsLast(Comparator.naturalOrder())));
         int startDepartureIndex = 0;
         int startArrivalIndex = 0;
-        for (int i = 1; i < gtfsList.size(); i++) {
-            GtfsStaticData sameTripStop = gtfsList.get(i);
-            if (isNotEmpty(sameTripStop.getDepartureTime())) {
-                try {
-                    LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(gtfsList.get(startDepartureIndex)
-                            .getDepartureTime()));
-                    LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getDepartureTime()));
-                    Duration difference = Duration.between(startTime, endTime).dividedBy(i - startDepartureIndex);
-                    for (int j = startDepartureIndex + 1; j < i; j++) {
-                        GtfsStaticData gtfsStaticData = gtfsList.get(j);
-                        gtfsStaticData.setDepartureTime(startTime.plus(difference.multipliedBy(j - startDepartureIndex))
-                                .format(staticScheduleTimeFormatter));
-                    }
-                } catch (DateTimeParseException ignored) {
-                } finally {
-                    startDepartureIndex = i;
+        for (int i = 1; i < stopTimes.size(); i++) {
+            AgencyStopTime sameTripStop = stopTimes.get(i);
+            if (sameTripStop.getDepartureTimeSecs() != null) {
+                var startTime = stopTimes.get(startDepartureIndex).getDepartureTimeSecs();
+                var endTime = sameTripStop.getDepartureTimeSecs();
+                var difference = (endTime - startTime) / (i - startDepartureIndex);
+                for (int j = startDepartureIndex + 1; j < i; j++) {
+                    AgencyStopTime agencyStopTime = stopTimes.get(j);
+                    var newDepartureTime = startTime + (difference * (j - startDepartureIndex));
+                    agencyStopTime.setDepartureTimeSecs(newDepartureTime);
                 }
+                startDepartureIndex = i;
             }
-            if (isNotEmpty(sameTripStop.getArrivalTime())) {
-                try {
-                    LocalTime startTime = LocalTime.parse(replaceGreaterThan24Hr(gtfsList.get(startArrivalIndex)
-                            .getArrivalTime()));
-                    LocalTime endTime = LocalTime.parse(replaceGreaterThan24Hr(sameTripStop.getArrivalTime()));
-                    Duration difference = Duration.between(startTime, endTime)
-                            .dividedBy(i - startArrivalIndex);
-                    for (int j = startArrivalIndex + 1; j < i; j++) {
-                        GtfsStaticData gtfsStaticData = gtfsList.get(j);
-                        gtfsStaticData.setArrivalTime(startTime.plus(difference.multipliedBy(j - startArrivalIndex))
-                                .format(staticScheduleTimeFormatter));
-                    }
-                } catch (DateTimeParseException ignored) {
-                } finally {
-                    startArrivalIndex = i;
+            if (sameTripStop.getArrivalTimeSecs() != null) {
+                var startTime = stopTimes.get(startArrivalIndex).getArrivalTimeSecs();
+                var endTime = sameTripStop.getArrivalTimeSecs();
+                var difference = (endTime - startTime) / (i - startArrivalIndex);
+                for (int j = startArrivalIndex + 1; j < i; j++) {
+                    AgencyStopTime agencyStopTime = stopTimes.get(j);
+                    var newArrivalTime = startTime + (difference * (j - startArrivalIndex));
+                    agencyStopTime.setArrivalTimeSecs(newArrivalTime);
                 }
+                startArrivalIndex = i;
             }
         }
     }
 
-    private static void waitForRequest(FluxSink<List<Integer>> fluxSink) {
-        while (fluxSink.requestedFromDownstream() == 0) {
-            try {
-                Thread.sleep(100); // Sleep for 100ms until more requests arrive
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    private static boolean isMissingArrivalsOrDepartures(GtfsStaticData gtfsStaticData) {
-        return gtfsStaticData.getDepartureTime() == null || gtfsStaticData.getArrivalTime() == null;
-    }
-
-    private void readAgencyTimezoneAndSaveToDb(String agencyId, File file) {
+    private void readAgencyTimezoneAndSaveToDb(String agencyId) {
+        File file = new File("files" + File.separator + agencyId + File.separator + AGENCY.getFileName());
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
         try (MappingIterator<AgencyAttributes> attributesIterator = csvMapper
@@ -195,52 +108,226 @@ public class GtfsStaticParserService {
                     log.error("UNABLE TO FIND TZ FOR ID: {}", agencyId);
                     return;
                 }
-                agencyFeedRepository.getAgencyFeedById(agencyId, false)
-                        .subscribe(f -> {
-                            f.setTimezone(timezone);
-                            agencyFeedRepository.writeAgencyFeed(f);
-                            log.info("Completed TZ write for id: {}", agencyId);
-                        });
-                break;
+                agencyFeedRepository.updateTimezoneById(timezone, agencyId);
             }
         } catch (IOException e) {
             log.error("Failed to read agency.csv file: {}", file.getName(), e);
+        } finally {
+            file.delete();
         }
     }
 
-    public void writeGtfsStaticDataToDynamoFromDiskSync(AgencyFeed feed) {
+    public void writeGtfsStaticDataToDbFromDiskSync(AgencyFeedDto feed) {
         var agencyId = feed.getId();
-        if (agencyId == null) {
-            log.error("Agency id null!");
+        var agency = agencyFeedRepository.findById(agencyId);
+        if (agency.isEmpty()) {
+            log.error("Agency not found!");
+            return;
         }
-        Map<String, String> routeIdToNameMap = new HashMap<>();
-        Map<String, String> tripIdToNameMap = new HashMap<>();
-        Map<String, String> stopIdToNameMap = new HashMap<>();
-        for (GtfsStaticData.TYPE value : GtfsStaticData.TYPE.values()) {
-            File file = new File("files" + File.separator + agencyId + File.separator + value.getFileName());
-            try {
-                switch (value) {
-                    case AGENCY -> readAgencyTimezoneAndSaveToDb(agencyId, file);
-                    case ROUTE ->
-                            readGtfsAndSaveToDb(agencyId, file, RoutesAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
-                    case TRIP ->
-                            readGtfsAndSaveToDb(agencyId, file, TripAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
-                    case STOPTIME ->
-                            readGtfsAndSaveToDb(agencyId, file, StopTimeAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
-                    case STOP ->
-                            readGtfsAndSaveToDb(agencyId, file, StopAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
-                    case SHAPE ->
-                            readGtfsAndSaveToDb(agencyId, file, ShapeAttributes.class, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap);
-                    default -> log.error("No case for type: {}", value);
-                }
-                file.delete();
-                log.info("{} read finished for id: {}", value.getName(), agencyId);
-            } finally {
-                file.deleteOnExit();
-            }
-        }
+        readAgencyTimezoneAndSaveToDb(agencyId);
+        log.info("Saving routes...");
+        saveRoutes(agency, agencyId);
+        log.info("Saving trips...");
+        var maps = saveTrips(agencyId);
+        var agencyTripMap = maps.get(0);
+        log.info("Saving shapes...");
+        saveShapes(agencyId);
+        log.info("Saving stops...");
+        var agencyStopMap = saveStops(agencyId);
+        log.info("Saving stopTimes...");
+        saveStopTimes(agencyTripMap,agencyStopMap,agencyId, agency.get().getTimezone());
         new File("files" + File.separator + agencyId).delete();
         log.info("All file read finished for id: {}", agencyId);
+    }
+
+    private void saveStopTimes(Map<String, AgencyTrip> agencyTripMap, Map<String, AgencyStop> agencyStopMap, String agencyId, String timezone) {
+        File file = new File("files" + File.separator + agencyId + File.separator + STOPTIME.getFileName());
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        try (MappingIterator<StopTimeAttributes> attributesIterator = csvMapper
+                .readerWithSchemaFor(StopTimeAttributes.class)
+                .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
+                .readValues(file)) {
+
+            List<AgencyStopTime> stopTimesToSave = new ArrayList<>();
+            String tripId = null;
+            while (attributesIterator.hasNext()) {
+                var stopTime = attributesIterator.next();
+
+                int arrivalSecs = TransitDateUtil.convertGtfsTimeToSeconds(stopTime.getArrivalTime());
+                int departureSecs = TransitDateUtil.convertGtfsTimeToSeconds(stopTime.getDepartureTime());
+
+                AgencyTrip trip = agencyTripMap.get(stopTime.getTripId());
+                AgencyStop stop = agencyStopMap.get(stopTime.getStopId());
+
+                if (trip == null || stop == null) {
+                    log.warn("Skipping StopTime for tripId: {} or stopId: {} - Missing reference data.",
+                            stopTime.getTripId(), stopTime.getStopId());
+                    continue;
+                }
+
+                var entity = AgencyStopTime.builder()
+                        .id(AgencyStopTimeId.builder()
+                                .stopSequence(stopTime.getStopSequence())
+                                .agencyId(agencyId)
+                                .tripId(stopTime.getTripId())
+                                .build()
+                        )
+                        .trip(trip)
+                        .stop(stop)
+                        .stopId(stop.getStopId())
+                        .arrivalTimeSecs(arrivalSecs)
+                        .departureTimeSecs(departureSecs)
+                        .build();
+                if (tripId != null && !Objects.equals(stopTime.getTripId(), tripId)) {
+                    interpolateDelay(stopTimesToSave);
+                    agencyStopTimeRepository.saveAllAndFlush(stopTimesToSave);
+                    stopTimesToSave.clear();
+                }
+                stopTimesToSave.add(entity);
+                tripId = stopTime.getTripId();
+            }
+            interpolateDelay(stopTimesToSave);
+            agencyStopTimeRepository.saveAllAndFlush(stopTimesToSave);
+        } catch (IOException e) {
+            log.error("Failed to read {} stop times", agencyId, e);
+        }
+        file.delete();
+    }
+
+    private Map<String, AgencyStop> saveStops(String agencyId) {
+        File file = new File("files" + File.separator + agencyId + File.separator + STOP.getFileName());
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        Map<String, AgencyStop> stopMap = new HashMap<>();
+        try (MappingIterator<StopAttributes> attributesIterator = csvMapper
+                .readerWithSchemaFor(StopAttributes.class)
+                .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
+                .readValues(file)) {
+            while (attributesIterator.hasNext()) {
+                var stop = attributesIterator.next();
+                var entity = AgencyStop.builder()
+                        .id(new AgencyStopId(stop.getStopId(), agencyId))
+                        .stopName(stop.getStopName())
+                        .stopLat(stop.getStopLat())
+                        .stopLon(stop.getStopLon())
+                        .build();
+                stopMap.put(stop.getStopId(), entity);
+            }
+        } catch (IOException e) {
+            log.error("Failed to read {} stops", agencyId);
+        }
+        agencyStopRepository.saveAll(stopMap.values());
+        file.delete();
+        return stopMap;
+    }
+
+    private void saveShapes(String agencyId) {
+        File file = new File("files" + File.separator + agencyId + File.separator + SHAPE.getFileName());
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        try (MappingIterator<ShapeAttributes> attributesIterator = csvMapper
+                .readerWithSchemaFor(ShapeAttributes.class)
+                .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
+                .readValues(file)) {
+            List<AgencyShapePoint> shapes = new ArrayList<>();
+            while (attributesIterator.hasNext()) {
+                ShapeAttributes shapeAttrs = attributesIterator.next();
+                var entity = AgencyShapePoint.builder()
+                        .id(AgencyShapePointId.builder()
+                                .shapeId(shapeAttrs.getShapeId())
+                                .sequence(shapeAttrs.getShapePtSequence())
+                                .agencyId(agencyId)
+                                .build())
+                        .shapePtLat(shapeAttrs.getShapePtLat())
+                        .shapePtLon(shapeAttrs.getShapePtLon())
+                        .build();
+                shapes.add(entity);
+                if(shapes.size() >= 50) {
+                    agencyShapePointRepository.saveAll(shapes);
+                    shapes.clear();
+                }
+            }
+            agencyShapePointRepository.saveAll(shapes);
+        } catch (IOException e) {
+            log.error("Failed to read {} shapes", agencyId);
+        }
+        agencyShapePointRepository.flush();
+        file.delete();
+    }
+
+    private List<Map<String, AgencyTrip>> saveTrips(String agencyId) {
+        File file = new File("files" + File.separator + agencyId + File.separator + TRIP.getFileName());
+        Map<String, AgencyTrip> tripMap = new HashMap<>();
+        Map<String, AgencyTrip> shapeMap = new HashMap<>();
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        List<AgencyShape> shapes = new ArrayList<>();
+        try (MappingIterator<TripAttributes> attributesIterator = csvMapper
+                .readerWithSchemaFor(TripAttributes.class)
+                .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
+                .readValues(file)) {
+            while (attributesIterator.hasNext()) {
+                TripAttributes tripsAttributes = attributesIterator.next();
+                var entity = AgencyTrip.builder()
+                        .id(new AgencyTripId(tripsAttributes.getTripId(), agencyId))
+                        .routeId(tripsAttributes.getRouteId())
+                        .shapeId(tripsAttributes.getShapeId())
+                        .build();
+                var shapeEntity = AgencyShape.builder()
+                        .id(AgencyShapeId.builder()
+                                .agencyId(agencyId)
+                                .shapeId(tripsAttributes.getShapeId())
+                                .build())
+                        .tripId(tripsAttributes.getTripId())
+                        .build();
+                tripMap.putIfAbsent(entity.getTripId(), entity);
+                shapeMap.putIfAbsent(tripsAttributes.getShapeId(), entity);
+                shapes.add(shapeEntity);
+            }
+            agencyShapeRepository.saveAllAndFlush(shapes);
+            agencyTripRepository.saveAllAndFlush(tripMap.values());
+        } catch (IOException e) {
+            log.error("Failed to read {} trips", agencyId);
+        }
+        file.delete();
+        agencyTripRepository.flush();
+        return List.of(tripMap, shapeMap);
+    }
+
+    private void saveRoutes(Optional<AgencyFeed> agency, String agencyId) {
+        File file = new File("files" + File.separator + agencyId + File.separator + ROUTE.getFileName());
+        Map<String, AgencyRoute> routeMap = new HashMap<>();
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+        try (MappingIterator<RoutesAttributes> attributesIterator = csvMapper
+                .readerWithSchemaFor(RoutesAttributes.class)
+                .with(schema)
+                .with(CsvParser.Feature.TRIM_SPACES)
+                .readValues(file)) {
+            while (attributesIterator.hasNext()) {
+                RoutesAttributes routesAttributes = attributesIterator.next();
+                var routesName = routesAttributes.getRouteShortName();
+                if (isBlank(routesName)) routesName = routesAttributes.getRouteLongName();
+                var entity = AgencyRoute.builder()
+                        .id(new AgencyRouteId(routesAttributes.getRouteId(), agencyId))
+                        .agency(agency.get())
+                        .routeName(routesName)
+                        .routeColor('#' + routesAttributes.getRouteColor())
+                        .routeSortOrder(routesAttributes.getRouteSortOrder())
+                        .build();
+                routeMap.putIfAbsent(entity.getRouteId(), entity);
+            }
+            agencyRouteRepository.saveAll(routeMap.values());
+        } catch (IOException e) {
+            log.error("Failed to read {} routes", agencyId);
+        }
+        file.delete();
+        agencyRouteRepository.flush();
     }
 
     /**
@@ -251,7 +338,7 @@ public class GtfsStaticParserService {
      * @return AgencyStaticStatus w/ success false if timeout or IO exception, success of true otherwise.
      * @implNote this may need to be forcibly timed out. some providers never return data, leading to thread starvation
      */
-    public CompletableFuture<AgencyStaticStatus> writeGtfsRoutesToDiskAsync(AgencyFeed feed, int timeoutSeconds) {
+    public CompletableFuture<AgencyStaticStatus> writeGtfsRoutesToDiskAsync(AgencyFeedDto feed, int timeoutSeconds) {
         var timeOutErr = AgencyStaticStatus.builder().success(false).message("Timeout").feed(feed).build();
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -263,98 +350,6 @@ public class GtfsStaticParserService {
             }
             return AgencyStaticStatus.builder().message("Success-ish :)").success(true).feed(feed).build();
         }).completeOnTimeout(timeOutErr, timeoutSeconds, TimeUnit.SECONDS);
-    }
-
-    /**
-     * Generic converter to read data from a single file (routes.txt, trips.txt, etc.) from file and write to dynamo.
-     *
-     * @param <T>      an Attributes class used to map against .csv file passed in. Should be
-     * @param agencyId the agencyId to write to dynamo from
-     * @param file     the file to read from
-     * @param clazz    instance of T
-     */
-    private <T> void readGtfsAndSaveToDb(String agencyId, File file, Class<T> clazz,
-                                         Map<String, String> routeIdToNameMap,
-                                         Map<String, String> tripIdToNameMap,
-                                         Map<String, String> stopIdToNameMap) {
-        CsvMapper csvMapper = new CsvMapper();
-        CsvSchema schema = CsvSchema.emptySchema().withHeader();
-        try (MappingIterator<T> attributesIterator = csvMapper
-                .readerWithSchemaFor(clazz)
-                .with(schema)
-                .with(CsvParser.Feature.TRIM_SPACES)
-                .readValues(file)) {
-            List<GtfsStaticData> gtfsList = new ArrayList<>();
-            boolean isStopTimes = false;
-            boolean hasWrittenYet = false;
-            while (attributesIterator.hasNext()) {
-                T attributes = attributesIterator.next();
-                if (attributes instanceof StopTimeAttributes) {
-                    isStopTimes = true;
-                }
-                var staticData = getGtfsData(agencyId, routeIdToNameMap, tripIdToNameMap, stopIdToNameMap, attributes, gtfsList, attributesIterator);
-                if (staticData == null) {
-                    attributesIterator.close();
-                    break;
-                }
-                gtfsList.add(staticData);
-                if (gtfsList.size() >= 500 && !isMissingArrivalsOrDepartures(staticData)) {
-                    //remove the value written by the old segment.
-                    //we need this 'hasWrittenYet' to avoid rewriting the very first value
-                    if (hasWrittenYet) {
-                        gtfsList.remove(0);
-                    }
-                    interpolateAndWriteList(isStopTimes, gtfsList);
-                    hasWrittenYet = true;
-                    //to interpolate, we need the very last value added, which we verified is not missing arrivals/departures
-                    var tempOldValue = gtfsList.get(gtfsList.size() - 1);
-                    gtfsList.clear();
-                    gtfsList.add(tempOldValue);
-                }
-            }
-            interpolateAndWriteList(isStopTimes, gtfsList);
-        } catch (IOException | DateTimeParseException e) {
-            log.error("Failed to read file: {}", file.getName(), e);
-        }
-    }
-
-    private <T> GtfsStaticData getGtfsData(String agencyId, Map<String, String> routeIdToNameMap, Map<String, String> tripIdToNameMap, Map<String, String> stopIdToNameMap, T attributes, List<GtfsStaticData> gtfsList, MappingIterator<T> attributesIterator) throws IOException {
-        if (attributes instanceof RoutesAttributes)
-            return convert((RoutesAttributes) attributes, agencyId, routeIdToNameMap);
-        else if (attributes instanceof StopAttributes)
-            return convert((StopAttributes) attributes, agencyId, stopIdToNameMap);
-        else if (attributes instanceof TripAttributes)
-            return convert((TripAttributes) attributes, agencyId, routeIdToNameMap, tripIdToNameMap);
-        else if (attributes instanceof ShapeAttributes)
-            return convert((ShapeAttributes) attributes, agencyId);
-        else if (attributes instanceof StopTimeAttributes) {
-            return convert((StopTimeAttributes) attributes, agencyId, tripIdToNameMap, stopIdToNameMap);
-        } else {
-            //this shouldn't be possible if you code it right... famous last words
-            log.error("UNRECOGNIZED TYPE OF ATTRIBUTE, FAST FAIL.");
-            return null;
-        }
-    }
-
-    private GtfsStaticData convert(ShapeAttributes attributes, String agencyId) {
-        GtfsStaticData gtfsStaticData = new GtfsStaticData();
-        gtfsStaticData.setId(attributes.getShapeId() + ":" + attributes.getShapePtSequence());
-        gtfsStaticData.setStopLat(attributes.getShapePtLat());
-        gtfsStaticData.setStopLon(attributes.getShapePtLon());
-        gtfsStaticData.setAgencyType(agencyId, SHAPE);
-        return gtfsStaticData;
-    }
-
-    private void interpolateAndWriteList(boolean isStopTimes, List<GtfsStaticData> gtfsList) {
-        if (isStopTimes && isMissingArrivalsOrDepartures(gtfsList)) {
-            interpolateDelay(gtfsList);
-        }
-        gtfsStaticRepository.saveAll(gtfsList);
-    }
-
-    private boolean isMissingArrivalsOrDepartures(List<GtfsStaticData> gtfsList) {
-        return gtfsList.stream()
-                .anyMatch(GtfsStaticParserService::isMissingArrivalsOrDepartures);
     }
 
     /**
@@ -382,10 +377,10 @@ public class GtfsStaticParserService {
             //all hail zt-zip. The code before this was hard to read and difficult to maintain
             var outputDir = new File("files" + File.separator + feedId);
             ZipUtil.unpack(agencyGtfsZipStream, outputDir, fileName -> {
-                //only write files that we have a valid TYPE to parse for.
-                GtfsStaticData.TYPE type = getTypeEndsWith(fileName.replace(".txt", ".csv"));
-                if (type == null) return null;
-                return type.getFileName();
+                //only write files that we have a valid GtfsStaticDataType to parse for.
+                GtfsStaticDataType gtfsStaticDataType = getTypeEndsWith(fileName.replace(".txt", ".csv"));
+                if (gtfsStaticDataType == null) return null;
+                return gtfsStaticDataType.getFileName();
             });
             return true;
         }

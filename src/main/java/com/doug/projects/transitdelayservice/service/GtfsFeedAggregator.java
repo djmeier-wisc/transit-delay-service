@@ -1,6 +1,7 @@
 package com.doug.projects.transitdelayservice.service;
 
-import com.doug.projects.transitdelayservice.entity.dynamodb.AgencyFeed;
+import com.doug.projects.transitdelayservice.entity.Status;
+import com.doug.projects.transitdelayservice.entity.jpa.AgencyFeedDto;
 import com.doug.projects.transitdelayservice.entity.openmobilityfeed.OpenMobilitySource;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
@@ -84,7 +85,7 @@ public class GtfsFeedAggregator {
      *
      * @return
      */
-    public List<AgencyFeed> gatherRTFeeds() {
+    public List<AgencyFeedDto> gatherRTFeeds() {
         List<OpenMobilitySource> allSources = gatherAllFeedData();
         //all OMS, grouped by id
         Map<String, OpenMobilitySource> allSourcesMap = gatherAllFeedData().stream()
@@ -108,16 +109,16 @@ public class GtfsFeedAggregator {
                 .map(rtFeed -> {
                     OpenMobilitySource staticFeed =
                             allSourcesMap.get(findNewStaticId(rtFeed.getStaticReference(), oldIdToNewIdMap));
-                    return AgencyFeed.builder()
+                    return AgencyFeedDto.builder()
                             .realTimeUrl(rtFeed.getDirectDownloadUrl())
                             .staticUrl(staticFeed.getDirectDownloadUrl())
                             .id(findRootRTFeed(rtFeed.getMdbSourceId(), allSourcesMap, redirectMap))
-                            .status(AgencyFeed.Status.ACTIVE.toString())
+                            .status(Status.ACTIVE)
                             .name(rtFeed.getProvider())
                             .state(rtFeed.getSubdivisionName())
                             .build();
                 })
-                .sorted(Comparator.comparing(AgencyFeed::getId))
+                .sorted(Comparator.comparing(AgencyFeedDto::getId))
                 .toList();
     }
 }
