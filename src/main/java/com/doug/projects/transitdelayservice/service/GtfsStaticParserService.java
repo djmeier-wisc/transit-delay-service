@@ -112,6 +112,8 @@ public class GtfsStaticParserService {
             }
         } catch (IOException e) {
             log.error("Failed to read agency.csv file: {}", file.getName(), e);
+        } finally {
+            file.delete();
         }
     }
 
@@ -191,11 +193,7 @@ public class GtfsStaticParserService {
         } catch (IOException e) {
             log.error("Failed to read {} stop times", agencyId, e);
         }
-
-        // Note: You must correct the original method's save call.
-        // It was trying to save stopMap (AgencyStop) instead of the StopTime entity.
-        // Also, usually you keep stop files for debugging, but if deletion is policy, keep it.
-        // file.delete();
+        file.delete();
     }
 
     private Map<String, AgencyStop> saveStops(String agencyId) {
