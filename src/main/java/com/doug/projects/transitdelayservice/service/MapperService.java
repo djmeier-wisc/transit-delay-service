@@ -16,6 +16,7 @@ import org.geojson.Feature;
 import org.geojson.FeatureCollection;
 import org.geojson.LineString;
 import org.geojson.LngLatAlt;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.*;
 
+import static com.doug.projects.transitdelayservice.config.CachingConfiguration.DELAY_MAP_CACHE;
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.getMidnightDaysAgo;
 import static com.doug.projects.transitdelayservice.util.TransitDateUtil.getMidnightTonight;
 import static java.util.Collections.emptyList;
@@ -147,6 +149,7 @@ public class MapperService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(DELAY_MAP_CACHE)
     public FeatureCollection getDelayLines(String feedId, MapOptions mapOptions) {
         if (CollectionUtils.isEmpty(mapOptions.getRouteNames()) || StringUtils.isBlank(feedId)) {
             log.error("Failed due to empty feedId or routeNames");

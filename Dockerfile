@@ -36,7 +36,6 @@ FROM eclipse-temurin:17-jre-focal
 # Set necessary environment variables
 ENV TZ America/Chicago
 ENV SPRING_OUTPUT_ANSI_ENABLED ALWAYS
-ENV JAVA_TOOL_OPTIONS "-Xms128m -Xmx512m"
 
 # Set the working directory
 WORKDIR /app

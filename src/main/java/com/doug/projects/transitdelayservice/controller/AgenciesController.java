@@ -35,4 +35,10 @@ public class AgenciesController {
     public ResponseEntity<AgencyFeedDto> getActiveAgencies(@PathVariable String feedId) {
         return agencyFeedService.getAgencyFeedById(feedId).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
+
+    @GetMapping("/v1/agencies/{feedId}/status")
+    @ApiResponses(value = {@ApiResponse(responseCode = "200", description = "OK")})
+    public ResponseEntity<String> getActiveAgenciesStatus(@PathVariable String feedId) {
+        return agencyFeedService.getAgencyFeedStatusById(feedId).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
 }

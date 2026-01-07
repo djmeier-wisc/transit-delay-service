@@ -17,6 +17,10 @@ import java.util.Objects;
                         name = "uk_trip_delay_trip_agency_stop_time",
                         columnNames = {"trip_id", "agency_id", "timestamp"}
                 )
+        },
+        indexes = {
+                @Index(name = "idx_adr_agency_timestamp", columnList = "agency_id, timestamp"),
+                @Index(name = "idx_adr_trip_id", columnList = "trip_id")
         }
 )
 @Getter
@@ -26,8 +30,6 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgencyTripDelay {
-
-    // --- NEW: SURROGATE PRIMARY KEY ---
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -51,9 +53,6 @@ public class AgencyTripDelay {
     })
     private AgencyStop agencyStop;
 
-
-    // --- RELATIONSHIP 2: AgencyTrip (FK: trip_id, agency_id) ---
-    // The columns are already managed by the fields above (this.tripId, this.agencyId).
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
             @JoinColumn(name = "trip_id", referencedColumnName = "trip_id", nullable = false, insertable = false, updatable = false),

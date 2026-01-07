@@ -13,4 +13,14 @@ public interface AgencyRouteRepository extends JpaRepository<AgencyRoute, Agency
     Optional<String> findRouteNameById(AgencyRouteId routeId);
 
     List<AgencyRoute> findAllByAgency_Id(String agencyId);
+
+    @Query("""
+                select r.routeName
+                from AgencyRoute r
+                where r.id.agencyId = :agencyId
+                and exists (select 1 from AgencyTripDelay d where d.trip.route = r)
+                group by r.routeName
+                order by min(r.routeSortOrder) asc, r.routeName asc
+            """)
+    List<String> findAllByAgencyIdFiltered(String agencyId);
 }

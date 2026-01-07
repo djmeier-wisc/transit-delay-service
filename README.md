@@ -1,7 +1,8 @@
 # TRANSIT DELAY SERVICE
 
 ## Frontend
-The frontend is available at https://my-precious-time.com/
+
+The frontend is available at https://mpt.dougmeier.dev
 
 This service:
 
@@ -28,7 +29,9 @@ This service:
 
 ### Documentation
 
-- API documentation for endpoints is pending, although [Swagger UI is available](https://api.my-precious-time.com/webjars/swagger-ui/index.html). Please open an issue or reach out if you would like to use our APIs, or use any of our data.
+- API documentation for endpoints is pending,
+  although [Swagger UI is available](https://api-mpt.dougmeier.dev/swagger-ui/index.html#/). Please open an issue or
+  reach out if you would like to use our APIs, or use any of our data.
 
 ### Running our service
 

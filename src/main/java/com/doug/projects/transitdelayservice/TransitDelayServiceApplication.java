@@ -1,12 +1,12 @@
 package com.doug.projects.transitdelayservice;
 
-import com.google.protobuf.ExtensionRegistry;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.converter.protobuf.ProtobufHttpMessageConverter;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -18,11 +18,12 @@ import java.time.Duration;
 @EnableScheduling
 @OpenAPIDefinition(
         servers = {
-                @Server(url = "https://api.my-precious-time.com", description = "Production API"),
+                @Server(url = "https://mpt.dougmeier.dev", description = "Production API"),
                 @Server(url = "http://localhost:8080", description = "Local API")
         }
 )
 @RequiredArgsConstructor
+@EnableCaching
 public class TransitDelayServiceApplication {
 
     public static void main(String[] args) {
@@ -40,7 +41,6 @@ public class TransitDelayServiceApplication {
 
     @Bean
     public ProtobufHttpMessageConverter protobufHttpMessageConverter() {
-        ExtensionRegistry registry = ExtensionRegistry.newInstance();
         return new ProtobufHttpMessageConverter();
     }
 }

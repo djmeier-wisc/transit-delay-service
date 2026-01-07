@@ -35,6 +35,10 @@ public class AgencyFeedService {
                 .map(AgencyFeedService::mapAgencyFeedDto);
     }
 
+    public Optional<String> getAgencyFeedStatusById(String id) {
+        return agencyFeedRepository.findStatusById(id);
+    }
+
     private static @NotNull AgencyFeedDto mapAgencyFeedDto(AgencyFeed entity) {
         return new AgencyFeedDto(
                 entity.getId(),

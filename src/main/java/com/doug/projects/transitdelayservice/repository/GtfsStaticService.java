@@ -5,12 +5,9 @@ import com.doug.projects.transitdelayservice.repository.jpa.AgencyRouteRepositor
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-
-import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseFirstPartInt;
-import static com.doug.projects.transitdelayservice.util.LineGraphUtil.parseLastPartInt;
-import static java.util.Comparator.*;
 
 @Repository
 @Slf4j
@@ -31,15 +28,7 @@ public class GtfsStaticService {
      * @return the routeNames associated with that agency.
      */
     public List<String> findAllRouteNamesSorted(String agencyId) {
-        return agencyRouteRepository.findAllByAgency_Id(agencyId)
-                .stream()
-                .sorted(comparing(AgencyRoute::getRouteSortOrder, nullsLast(naturalOrder()))
-                        .thenComparing((AgencyRoute d) -> parseFirstPartInt(d.getRouteName()), nullsLast(naturalOrder()))
-                        .thenComparing((AgencyRoute d) -> parseLastPartInt(d.getRouteName()), nullsLast(naturalOrder()))
-                        .thenComparing(AgencyRoute::getRouteName, nullsLast(naturalOrder())))
-                .map(AgencyRoute::getRouteName)
-                .distinct()
-                .toList();
+        return agencyRouteRepository.findAllByAgencyIdFiltered(agencyId);
     }
 
     public Map<String, String> getRouteNameToColorMap(String agencyId) {

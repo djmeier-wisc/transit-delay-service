@@ -5,6 +5,7 @@ import com.doug.projects.transitdelayservice.entity.BusState;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyStopId;
 import com.doug.projects.transitdelayservice.entity.jpa.AgencyTripDelay;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyStopRepository;
+import com.doug.projects.transitdelayservice.repository.jpa.AgencyTripDelayDto;
 import com.doug.projects.transitdelayservice.repository.jpa.AgencyTripDelayRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,8 +77,8 @@ public class AgencyRouteTimestampRepository {
 
         var delayByRouteName = agencyTripDelayRepository.findDelayRecordsForRoutesAndTimeRange(feedId, routeNames, startTime, endTime)
                 .stream()
-                .collect(Collectors.groupingBy(s -> s.getTrip().getRoute().getRouteName(),
-                        Collectors.groupingBy(AgencyTripDelay::getTimestamp)));
+                .collect(Collectors.groupingBy(AgencyTripDelayDto::routeName,
+                        Collectors.groupingBy(AgencyTripDelayDto::timestamp)));
         List<AgencyRouteTimestamp> routeTimestamps = new ArrayList<>();
         delayByRouteName.forEach((name, map) -> {
             map.forEach((timestamp, delays) -> {
@@ -86,9 +87,9 @@ public class AgencyRouteTimestampRepository {
                 routeTimestamp.setAgencyRoute(feedId, name);
                 var busStates = delays.stream()
                         .map(delay -> BusState.builder()
-                                .delay(delay.getDelaySeconds())
-                                .closestStopId(delay.getStopId())
-                                .tripId(delay.getTripId())
+                                .delay(delay.delaySeconds())
+                                .closestStopId(delay.stopId())
+                                .tripId(delay.tripId())
                                 .build())
                         .toList();
                 routeTimestamp.setBusStates(busStates);
