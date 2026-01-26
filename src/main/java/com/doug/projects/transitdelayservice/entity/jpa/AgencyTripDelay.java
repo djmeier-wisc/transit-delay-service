@@ -19,7 +19,8 @@ import java.util.Objects;
                 )
         },
         indexes = {
-                @Index(name = "idx_adr_agency_timestamp", columnList = "agency_id, timestamp"),
+                        // index optimized for lookups by trip id then timestamp when filtering on trip sets
+                @Index(name = "idx_adr_agency_trip_timestamp", columnList = "agency_id, trip_id, timestamp"),
                 @Index(name = "idx_adr_trip_id", columnList = "trip_id")
         }
 )

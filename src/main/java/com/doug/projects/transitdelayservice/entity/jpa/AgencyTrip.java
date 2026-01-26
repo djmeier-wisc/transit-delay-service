@@ -8,7 +8,9 @@ import java.util.List;
 import java.util.Objects;
 
 @Entity
-@Table(name = "gtfs_trip", schema = "MPT")
+@Table(name = "gtfs_trip", schema = "MPT", indexes = {
+        @Index(name = "idx_trip_agency_route", columnList = "agency_id, route_id")
+})
 @Getter
 @Setter
 @ToString
