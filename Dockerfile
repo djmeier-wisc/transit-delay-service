@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pom.xml .
 
 # Download dependencies
-RUN --mount=type=cache,target=/root/.m2/repository mvn dependency:go-offline [cite: 8]
+RUN --mount=type=cache,target=/root/.m2/repository mvn dependency:go-offline
 
 COPY src src
 
