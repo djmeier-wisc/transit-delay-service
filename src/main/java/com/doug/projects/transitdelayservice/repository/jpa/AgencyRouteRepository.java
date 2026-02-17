@@ -17,8 +17,10 @@ public interface AgencyRouteRepository extends JpaRepository<AgencyRoute, Agency
     @Query("""
                 select r.routeName
                 from AgencyRoute r
+                join AgencyTrip t on t.route = r
+                join AgencyTripDelay d on d.trip = t
                 where r.id.agencyId = :agencyId
-                and exists (select 1 from AgencyTripDelay d where d.trip.route = r)
+                and d.agencyId = :agencyId
                 group by r.routeName
                 order by min(r.routeSortOrder) asc, r.routeName asc
             """)
