@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.m2/repository mvn package
 # ==================================
 # Stage 2: RUNNER STAGE (For Execution)
 # ==================================
-FROM eclipse-temurin:17-jre-focal
+FROM maven:3.9.6-amazoncorretto-17
 
 # Set necessary environment variables
 ENV TZ America/Chicago

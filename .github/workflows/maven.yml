@@ -29,3 +29,16 @@ jobs:
         cache: maven
     - name: Build with Maven
       run: mvn -B test --file pom.xml
+
+  docker-build:
+    name: Build Docker "builder" stage and verify JDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Docker builder stage (compiles inside image)
+        run: docker build --target builder -f Dockerfile -t transit-delay-service:builder .
+      - name: Verify Java in builder image
+        run: |
+          docker run --rm transit-delay-service:builder java -version
+          docker run --rm transit-delay-service:builder mvn -v
