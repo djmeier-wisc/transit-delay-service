@@ -9,7 +9,7 @@ import java.util.List;
 
 @Data
 @Component
-@ConfigurationProperties(prefix = "openMobilityData")
+@ConfigurationProperties(prefix = "open-mobility-data")
 public class OpenMobilityDataProperties {
     private List<HardcodedFeed> hardcodedFeeds = new ArrayList<>();
 

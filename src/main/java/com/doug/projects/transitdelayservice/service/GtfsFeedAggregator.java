@@ -23,9 +23,9 @@ import com.doug.projects.transitdelayservice.config.OpenMobilityDataProperties;
 @Service
 @Slf4j
 public class GtfsFeedAggregator {
-    @Value("${openMobilityData.feedSource}")
+    @Value("${open-mobility-data.feed-source}")
     private String feedUrl;
-    @Value("#{'${openMobilityData.allowedIds}'.split(',')}")
+    @Value("#{'${open-mobility-data.allowed-ids}'.split(',')}")
     private Set<String> allowedFeedIds;
 
     private final OpenMobilityDataProperties openMobilityDataProperties;
