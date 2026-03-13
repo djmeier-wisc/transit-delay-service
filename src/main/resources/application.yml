@@ -5,6 +5,9 @@ metro:
 openMobilityData:
   feedSource: https://bit.ly/catalogs-csv
   allowedIds: 394,1318
+  hardcodedFeeds:
+    - static-url: https://metro.kingcounty.gov/GTFS/google_transit.zip
+      rt-tu: https://s3.amazonaws.com/kcm-alerts-realtime-prod/tripupdates.pb
 spring:
   codec:
     max-in-memory-size: 1000KB
