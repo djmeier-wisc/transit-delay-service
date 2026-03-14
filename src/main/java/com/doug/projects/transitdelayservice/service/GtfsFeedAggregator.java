@@ -17,6 +17,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import com.doug.projects.transitdelayservice.config.OpenMobilityDataProperties;
 
 @RequiredArgsConstructor
@@ -77,38 +79,6 @@ public class GtfsFeedAggregator {
                             .with(schema)
                             .readValues(in);
             List<OpenMobilitySource> all = routesAttributesIterator.readAll();
-
-            // merge any hardcoded feeds from properties
-            List<OpenMobilityDataProperties.HardcodedFeed> hardcoded =
-                    openMobilityDataProperties.getHardcodedFeeds();
-            int idx = 0;
-            for (OpenMobilityDataProperties.HardcodedFeed hf : hardcoded) {
-                String staticUrl = hf.getStaticUrl();
-                String rtUrl = hf.getRtTu();
-                if (staticUrl != null) {
-                    String staticId = "hardcoded-static-" + idx;
-                    OpenMobilitySource staticSource = OpenMobilitySource.builder()
-                            .mdbSourceId(staticId)
-                            .directDownloadUrl(staticUrl)
-                            .dataType("gtfs")
-                            .provider("hardcoded")
-                            .build();
-                    all.add(staticSource);
-                    if (rtUrl != null) {
-                        String rtId = "hardcoded-rt-" + idx;
-                        OpenMobilitySource rtSource = OpenMobilitySource.builder()
-                                .mdbSourceId(rtId)
-                                .entityType("tu")
-                                .staticReference(staticId)
-                                .directDownloadUrl(rtUrl)
-                                .provider("hardcoded")
-                                .build();
-                        all.add(rtSource);
-                    }
-                    idx++;
-                }
-            }
-
             return all;
         } catch (IOException e) {
             log.error("Failed to read feeds", e);
@@ -140,7 +110,7 @@ public class GtfsFeedAggregator {
                 .toList();
 
 
-        return rtFeeds.stream()
+        var feedsFromMbd = rtFeeds.stream()
                 .filter(f -> allowedFeedIds.contains(findRootRTFeed(f.getMdbSourceId(), allSourcesMap, redirectMap)))
                 .map(rtFeed -> {
                     OpenMobilitySource staticFeed =
@@ -155,6 +125,18 @@ public class GtfsFeedAggregator {
                             .build();
                 })
                 .sorted(Comparator.comparing(AgencyFeedDto::getId))
+                .toList();
+        List<AgencyFeedDto> hardcodedFeeds = openMobilityDataProperties.getHardcodedFeeds().stream()
+                .map(hf -> AgencyFeedDto.builder()
+                        .realTimeUrl(hf.getRtTu())
+                        .staticUrl(hf.getStaticUrl())
+                        .id("hardcoded-static-" + hf.getStaticUrl())
+                        .status(Status.ACTIVE)
+                        .name("Hardcoded Feed")
+                        .state("N/A")
+                        .build())
+                .toList();
+        return Stream.concat(feedsFromMbd.stream(), hardcodedFeeds.stream())
                 .toList();
     }
 }
