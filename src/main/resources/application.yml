@@ -2,9 +2,12 @@ metro:
   realtime: http://transitdata.cityofmadison.com/GTFS-RealTime/TrapezeRealTimeFeed.json
   gtfsStatic: http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip
   feedId: 394
-openMobilityData:
-  feedSource: https://bit.ly/catalogs-csv
-  allowedIds: 394,1318
+open-mobility-data:
+  feed-source: https://bit.ly/catalogs-csv
+  allowed-ids: 394,1318
+  hardcoded-feeds:
+    - static-url: https://metro.kingcounty.gov/GTFS/google_transit.zip
+      rt-tu: https://s3.amazonaws.com/kcm-alerts-realtime-prod/tripupdates.pb
 spring:
   codec:
     max-in-memory-size: 1000KB

@@ -17,15 +17,20 @@ import java.io.IOException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import com.doug.projects.transitdelayservice.config.OpenMobilityDataProperties;
 
 @RequiredArgsConstructor
 @Service
 @Slf4j
 public class GtfsFeedAggregator {
-    @Value("${openMobilityData.feedSource}")
+    @Value("${open-mobility-data.feed-source}")
     private String feedUrl;
-    @Value("#{'${openMobilityData.allowedIds}'.split(',')}")
+    @Value("#{'${open-mobility-data.allowed-ids}'.split(',')}")
     private Set<String> allowedFeedIds;
+
+    private final OpenMobilityDataProperties openMobilityDataProperties;
 
     private static boolean isTripUpdateFeed(OpenMobilitySource f) {
         return "tu".equals(f.getEntityType()) && StringUtils.isNotBlank(f.getStaticReference());
@@ -73,7 +78,8 @@ public class GtfsFeedAggregator {
                     csvMapper.readerWithSchemaFor(OpenMobilitySource.class)
                             .with(schema)
                             .readValues(in);
-            return routesAttributesIterator.readAll();
+            List<OpenMobilitySource> all = routesAttributesIterator.readAll();
+            return all;
         } catch (IOException e) {
             log.error("Failed to read feeds", e);
             return Collections.emptyList();
@@ -88,7 +94,7 @@ public class GtfsFeedAggregator {
     public List<AgencyFeedDto> gatherRTFeeds() {
         List<OpenMobilitySource> allSources = gatherAllFeedData();
         //all OMS, grouped by id
-        Map<String, OpenMobilitySource> allSourcesMap = gatherAllFeedData().stream()
+        Map<String, OpenMobilitySource> allSourcesMap = allSources.stream()
                 .collect(Collectors.toMap(OpenMobilitySource::getMdbSourceId, Function.identity()));
         //all redirect ids, mapped to their old OMS
         Map<String, OpenMobilitySource> redirectMap = allSources.stream()
@@ -104,7 +110,7 @@ public class GtfsFeedAggregator {
                 .toList();
 
 
-        return rtFeeds.stream()
+        var feedsFromMbd = rtFeeds.stream()
                 .filter(f -> allowedFeedIds.contains(findRootRTFeed(f.getMdbSourceId(), allSourcesMap, redirectMap)))
                 .map(rtFeed -> {
                     OpenMobilitySource staticFeed =
@@ -119,6 +125,18 @@ public class GtfsFeedAggregator {
                             .build();
                 })
                 .sorted(Comparator.comparing(AgencyFeedDto::getId))
+                .toList();
+        List<AgencyFeedDto> hardcodedFeeds = openMobilityDataProperties.getHardcodedFeeds().stream()
+                .map(hf -> AgencyFeedDto.builder()
+                        .realTimeUrl(hf.getRtTu())
+                        .staticUrl(hf.getStaticUrl())
+                        .id("hardcoded-static-" + hf.getStaticUrl())
+                        .status(Status.ACTIVE)
+                        .name("Hardcoded Feed")
+                        .state("N/A")
+                        .build())
+                .toList();
+        return Stream.concat(feedsFromMbd.stream(), hardcodedFeeds.stream())
                 .toList();
     }
 }
